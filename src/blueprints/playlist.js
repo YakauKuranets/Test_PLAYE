@@ -5,6 +5,12 @@ export const createPlaylistBlueprint = () => ({
       const url = URL.createObjectURL(file);
       elements.video.src = url;
       elements.video.dataset.filename = file.name;
+      state.selectedImportedFile = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        hash: file.hash || null,
+      };
       elements.video.load();
       actions.resetZoom();
       state.clipIn = null;
