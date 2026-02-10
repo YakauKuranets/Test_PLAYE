@@ -11,6 +11,8 @@ import { createTimelineBlueprint } from "./blueprints/timeline.js";
 import { createAiBlueprint } from "./blueprints/ai.js";
 
 const elements = {
+  appRoot: document.getElementById("app-root"),
+  compactToggle: document.getElementById("compact-toggle"),
   fileInput: document.getElementById("file-input"),
   playlist: document.getElementById("playlist"),
   video: document.getElementById("video"),
@@ -169,6 +171,7 @@ const state = {
   pipelineProcessing: false,
   pipelineErrors: [],
   pipelineMaxRetries: 2,
+  selectedImportedFileKey: null,
 };
 
 const createLogItem = ({ timestamp, caseId, owner, action, message }) => {
@@ -243,7 +246,9 @@ const actions = {
       return Number.isFinite(parsed) ? parsed : fallback;
     };
 
-    const selectedFile = state.importedFiles[0] || null;
+    const selectedFile = state.importedFiles.find((file) => file.key === state.selectedImportedFileKey)
+      || state.importedFiles[0]
+      || null;
     const tags = elements.caseTags.value
       .split(",")
       .map((tag) => tag.trim())
@@ -330,16 +335,19 @@ const actions = {
     link.download = `${namePrefix}-${Date.now()}.json`;
     link.click();
   },
-  recordLog: (action, message, meta = {}) => {
+  recordLog: (action, message, meta = {}, context = {}) => {
+    const tagsSource = Array.isArray(context.tags)
+      ? context.tags
+      : elements.caseTags.value
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
     const entry = {
       timestamp: new Date().toISOString(),
-      caseId: elements.caseId.value.trim(),
-      owner: elements.caseOwner.value.trim(),
-      status: elements.caseStatus.value,
-      tags: elements.caseTags.value
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
+      caseId: context.caseId ?? elements.caseId.value.trim(),
+      owner: context.owner ?? elements.caseOwner.value.trim(),
+      status: context.status ?? elements.caseStatus.value,
+      tags: tagsSource,
       action,
       message,
       meta,
@@ -457,7 +465,7 @@ const actions = {
       stage: nextJob.stage,
       attempt: nextJob.attempt,
       maxRetries: nextJob.maxRetries,
-    });
+    }, nextJob.caseContext);
 
     const progressTimer = window.setInterval(() => {
       if (nextJob.status !== "running") {
@@ -477,7 +485,7 @@ const actions = {
         nextJob.finishedAt = new Date().toISOString();
         actions.recordLog("pipeline-job-done", `Pipeline job-${nextJob.id} завершен`, {
           jobId: nextJob.id,
-        });
+        }, nextJob.caseContext);
       } else {
         nextJob.error = "source-missing";
         const errorEntry = actions.appendPipelineError(nextJob, nextJob.error);
@@ -493,7 +501,7 @@ const actions = {
             error: nextJob.error,
             nextAttempt: nextJob.attempt,
             maxRetries: nextJob.maxRetries,
-          });
+          }, nextJob.caseContext);
         } else {
           nextJob.status = "failed";
           nextJob.progress = 100;
@@ -503,7 +511,7 @@ const actions = {
             error: nextJob.error,
             attemptsUsed: nextJob.attempt,
             maxRetries: nextJob.maxRetries,
-          });
+          }, nextJob.caseContext);
         }
       }
       state.pipelineProcessing = false;
@@ -512,6 +520,15 @@ const actions = {
     }, 1200);
   },
   enqueuePipelineJob: (jobPayload, stage = "3.3.2") => {
+    const caseContext = {
+      caseId: elements.caseId.value.trim(),
+      owner: elements.caseOwner.value.trim(),
+      status: elements.caseStatus.value,
+      tags: elements.caseTags.value
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    };
     const job = {
       id: state.pipelineNextJobId,
       stage,
@@ -521,6 +538,7 @@ const actions = {
       attempt: 1,
       maxRetries: state.pipelineMaxRetries,
       hasSource: Boolean(jobPayload?.source),
+      caseContext,
     };
     state.pipelineNextJobId += 1;
     state.pipelineJobs.push(job);
@@ -529,7 +547,7 @@ const actions = {
       jobId: job.id,
       stage,
       hasSource: job.hasSource,
-    });
+    }, caseContext);
     actions.processNextPipelineJob();
     return job;
   },
@@ -635,7 +653,11 @@ const actions = {
     elements.caseSummary.value = caseItem.summary || "";
     state.logEntries = caseItem.logEntries || [];
     state.markers = caseItem.markers || [];
-    state.importedFiles = caseItem.importedFiles || [];
+    state.importedFiles = (caseItem.importedFiles || []).map((file) => ({
+      ...file,
+      key: file.key || `${file.name || "file"}::${file.size || 0}::${file.hash || "pending"}`,
+    }));
+    state.selectedImportedFileKey = state.importedFiles[0]?.key || null;
     actions.renderLogEntries();
     actions.renderMarkers();
     actions.updateCaseSummary();
@@ -676,5 +698,22 @@ orchestrator.register(createMotionBlueprint());
 orchestrator.register(createForensicBlueprint());
 orchestrator.register(createTimelineBlueprint());
 orchestrator.register(createAiBlueprint());
+
+const setCompactMode = (enabled) => {
+  if (!elements.appRoot || !elements.compactToggle) return;
+  elements.appRoot.classList.toggle("compact", enabled);
+  elements.compactToggle.textContent = `Компактный режим: ${enabled ? "вкл" : "выкл"}`;
+};
+
+const savedCompact = localStorage.getItem("uiCompactMode") === "1";
+setCompactMode(savedCompact);
+
+if (elements.compactToggle) {
+  elements.compactToggle.addEventListener("click", () => {
+    const nextValue = !elements.appRoot.classList.contains("compact");
+    setCompactMode(nextValue);
+    localStorage.setItem("uiCompactMode", nextValue ? "1" : "0");
+  });
+}
 
 orchestrator.start();

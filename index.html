@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app">
+    <div class="app" id="app-root">
       <aside class="sidebar">
         <div class="sidebar__header">
           <h1>Test_PLAYE</h1>
@@ -15,6 +15,7 @@
             <input type="file" id="file-input" accept="video/*" multiple />
             <span>Загрузить видео</span>
           </label>
+          <button id="compact-toggle" type="button" class="compact-toggle">Компактный режим: выкл</button>
         </div>
         <ul id="playlist" class="playlist"></ul>
       </aside>

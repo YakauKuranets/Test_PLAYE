@@ -28,6 +28,54 @@ body {
   gap: 16px;
 }
 
+
+
+.sidebar__header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compact-toggle {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.app.compact .sidebar {
+  width: 240px;
+  padding: 16px 12px;
+  gap: 10px;
+}
+
+.app.compact .main {
+  padding: 16px;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+
+.app.compact .viewer__surface {
+  height: 440px;
+}
+
+.app.compact .control-group {
+  padding: 12px;
+  gap: 8px;
+}
+
+.app.compact .control-group h2 {
+  font-size: 14px;
+}
+
+.app.compact .button-row,
+.app.compact .clip-row {
+  grid-template-columns: repeat(auto-fit, minmax(102px, 1fr));
+  gap: 6px;
+}
+
+.app.compact .log-list {
+  max-height: 120px;
+}
+
 .sidebar__header h1 {
   font-size: 20px;
   margin: 0 0 12px;
