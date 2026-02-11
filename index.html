@@ -7,7 +7,18 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app">
+    <section id="start-screen" class="start-screen">
+      <div class="start-screen__card">
+        <h1>Forensic AI Platform</h1>
+        <p>Выберите режим запуска системы.</p>
+        <div class="start-screen__actions">
+          <button id="start-open-player" type="button">Видео плеер</button>
+          <button id="start-open-photo" type="button">Реконструктор фото</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="app hidden" id="app-root">
       <aside class="sidebar">
         <div class="sidebar__header">
           <h1>Test_PLAYE</h1>
@@ -15,6 +26,7 @@
             <input type="file" id="file-input" accept="video/*" multiple />
             <span>Загрузить видео</span>
           </label>
+          <button id="compact-toggle" type="button" class="compact-toggle">Компактный режим: выкл</button>
         </div>
         <ul id="playlist" class="playlist"></ul>
       </aside>
@@ -322,13 +334,15 @@
               Найти лица (демо)
             </button>
             <button id="ai-object-detect" type="button">
-              Найти объекты (демо)
+              Найти объекты
             </button>
             <label>
               AI runtime provider
               <select id="ai-provider-select">
                 <option value="mock" selected>mock (demo)</option>
+                <option value="tfjs">tfjs (coco-ssd)</option>
                 <option value="onnx">onnx runtime</option>
+                <option value="backend">backend runtime (mvp)</option>
                 <option value="torch">torch runtime</option>
               </select>
             </label>
@@ -336,6 +350,13 @@
               <button id="ai-capability-check" type="button">Проверка AI/GPU capability</button>
             </div>
             <p class="muted" id="ai-capability-status">Capability: не проверено.</p>
+            <label>
+              Backend endpoint (MVP)
+              <input type="text" id="ai-backend-url" placeholder="http://127.0.0.1:8000" />
+            </label>
+            <div class="button-row">
+              <button id="ai-backend-check" type="button">Проверить backend</button>
+            </div>
             <div class="button-row">
               <button id="ai-track-start" type="button">Старт трекинга (демо)</button>
               <button id="ai-track-stop" type="button" disabled>Стоп трекинга</button>
@@ -369,6 +390,57 @@
               Добавлять маркеры объектов
             </label>
             <p class="muted" id="ai-status">Готов к анализу.</p>
+            <p class="muted" id="ai-backend-status">Backend: не проверен.</p>
+            <p class="muted" id="ai-backend-job-status">Backend job: нет активной задачи.</p>
+            <div class="backend-jobs-panel">
+              <div class="backend-jobs-toolbar">
+                <label>
+                  Backend jobs filter
+                  <select id="ai-backend-jobs-filter">
+                    <option value="all" selected>all</option>
+                    <option value="pending">pending</option>
+                    <option value="running">running</option>
+                    <option value="done">done</option>
+                    <option value="failed">failed</option>
+                    <option value="canceled">canceled</option>
+                    <option value="timeout">timeout</option>
+                  </select>
+                </label>
+                <button id="ai-backend-jobs-refresh" type="button">Обновить jobs</button>
+              </div>
+              <ul class="ai-face-list backend-jobs-list" id="ai-backend-jobs-list"></ul>
+              <p class="muted" id="ai-backend-jobs-pagination">Jobs page: 1</p>
+              <p class="muted" id="ai-backend-jobs-updated">Last update: —</p>
+              <p class="muted backend-jobs-warning" id="ai-backend-jobs-warning">Warning: none</p>
+              <p class="muted" id="ai-backend-jobs-detail">Job details: —</p>
+              <div class="button-row">
+                <button id="ai-backend-jobs-prev" type="button">Назад</button>
+                <button id="ai-backend-jobs-next" type="button">Вперед</button>
+              </div>
+            </div>
+            <div class="hypothesis-panel">
+              <h3>Режим гипотезы (быстрый реконструктор)</h3>
+              <p class="muted">Ленивый сценарий: загрузите исходник слева, нажмите «Сгенерировать снимок», и справа появится гипотетическая реконструкция.</p>
+              <label class="upload">
+                <input type="file" id="ai-hypothesis-input" accept="image/*" />
+                <span>Загрузить оригинальное фото</span>
+              </label>
+              <div class="button-row">
+                <button id="ai-hypothesis-generate" type="button">Сгенерировать снимок (гипотеза)</button>
+                <button id="ai-hypothesis-reset" type="button">Сброс</button>
+              </div>
+              <p class="muted" id="ai-hypothesis-status">Гипотеза: загрузите исходное фото.</p>
+              <div class="hypothesis-preview-grid">
+                <div class="hypothesis-preview-card">
+                  <p class="muted">Оригинал</p>
+                  <canvas id="ai-hypothesis-original" width="400" height="260"></canvas>
+                </div>
+                <div class="hypothesis-preview-card">
+                  <p class="muted">Реконструкция (гипотеза)</p>
+                  <canvas id="ai-hypothesis-result" width="400" height="260"></canvas>
+                </div>
+              </div>
+            </div>
             <p class="muted">Лица:</p>
             <ul class="ai-face-list" id="ai-face-list"></ul>
             <p class="muted">Объекты:</p>
@@ -535,6 +607,19 @@
         </section>
       </main>
     </div>
+
+    <section id="photo-reconstructor-screen" class="photo-reconstructor-screen hidden">
+      <div class="photo-reconstructor-screen__header">
+        <h2>Реконструктор фото</h2>
+        <button id="photo-back-to-start" type="button">Назад к выбору</button>
+      </div>
+      <p class="muted">Экран реконструктора фото выделен отдельно от видеоплеера. Следующим шагом сюда переносим инструменты реконструкции.</p>
+      <div class="photo-reconstructor-screen__placeholder">
+        <strong>Режим подготовлен.</strong>
+        <span>Здесь будет отдельный пайплайн реконструкции фото (Evidence / Hypothesis).</span>
+      </div>
+    </section>
+
     <canvas id="capture" class="hidden"></canvas>
     <script type="module" src="src/main.js"></script>
   </body>

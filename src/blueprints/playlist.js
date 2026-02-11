@@ -5,6 +5,7 @@ export const createPlaylistBlueprint = () => ({
       const url = URL.createObjectURL(file);
       elements.video.src = url;
       elements.video.dataset.filename = file.name;
+      state.selectedImportedFileKey = file.__playlistKey || null;
       elements.video.load();
       actions.resetZoom();
       state.clipIn = null;
@@ -21,14 +22,19 @@ export const createPlaylistBlueprint = () => ({
     const addToPlaylist = async (file) => {
       const item = document.createElement("li");
       item.textContent = file.name;
-      const hash = await actions.hashFile(file);
-      file.hash = hash;
-      state.importedFiles.push({
+      const itemKey = `${file.name}::${file.size}::${Date.now()}::${Math.random().toString(16).slice(2)}`;
+      file.__playlistKey = itemKey;
+      const importedFile = {
+        key: itemKey,
         name: file.name,
         size: file.size,
         type: file.type,
-        hash,
-      });
+        hash: null,
+      };
+      state.importedFiles.push(importedFile);
+      const hash = await actions.hashFile(file);
+      file.hash = hash;
+      importedFile.hash = hash;
       actions.recordLog("file-hash", `Хэш SHA-256 рассчитан для ${file.name}`, {
         name: file.name,
         hash,

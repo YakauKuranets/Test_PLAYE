@@ -100,6 +100,39 @@
 3. **AI**: детекция объектов/лиц, апскейл, авто‑улучшения.
 4. **Enterprise**: масштабирование, права, совместная работа.
 
+## Stage 4.5 — управление job lifecycle
+
+- Backend jobs получили дополнительные terminal-статусы: `canceled`, `timeout`.
+- Добавлен endpoint отмены задачи: `POST /jobs/{jobId}/cancel`.
+- В `GET /health` добавлен `jobRunTimeoutSec` для операционной диагностики.
+
+
+## Stage 4.6 — idempotency и операционный обзор jobs
+
+- Добавлен `idempotencyKey` в `POST /jobs` для защиты от дублей при ретраях/повторных кликах.
+- Добавлен `GET /jobs` со статус-фильтрацией и pagination (`limit`, `cursor`).
+- Расширены backend-контрактные тесты для idempotency и list-flow.
+
+
+## Stage 4.4 — инфраструктура запуска и CI
+
+- Добавлен `backend/Dockerfile` для контейнерного запуска backend API.
+- Добавлен `docker-compose.yml` для одновременного старта frontend (`:4173`) и backend (`:8000`).
+- Добавлен workflow `.github/workflows/backend-tests.yml` для автозапуска backend-контрактных тестов в CI.
+
+Быстрый старт:
+
+```bash
+docker compose up --build
+```
+
+Проверка backend:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+
 ## Локальный запуск (прототип)
 
 1. Откройте файл `index.html` в браузере.
@@ -107,3 +140,11 @@
 3. Выберите ролик в списке и используйте элементы управления для тестирования функций.
 
 > Прототип реализован на чистом HTML/CSS/JS и использует возможности браузера.
+
+
+## Stage 4.8.4 — стабилизация jobs monitor
+
+- Добавлены UX-индикаторы jobs monitor: `Last update` и `Warning`, чтобы оператор видел актуальность списка и ошибки обновления без очистки элементов.
+- Retry доработан до детерминированного режима (используется snapshot payload исходного job, если он доступен).
+- Для `done` jobs добавлена операция `Copy JSON` результата для быстрого обмена/аудита.
+- Расширен `Open result` (показываются `requestId`, `modelVersion`, `latency` и source metadata).

@@ -1,0 +1,19 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: test_playe_backend
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: python:3.11-slim
+    container_name: test_playe_frontend
+    working_dir: /app
+    command: python -m http.server 4173 --bind 0.0.0.0
+    volumes:
+      - ./:/app
+    ports:
+      - "4173:4173"
+    depends_on:
+      - backend

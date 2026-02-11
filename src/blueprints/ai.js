@@ -6,6 +6,8 @@ export const createAiBlueprint = () => ({
     let faceDetector = null;
     let trackingLoopId = null;
     let trackingActive = false;
+    let backendJobsAutoRefreshId = null;
+    let detectObjectsInProgress = false;
 
     const trackingState = {
       nextTrackId: 1,
@@ -15,6 +17,135 @@ export const createAiBlueprint = () => ({
     const sceneState = {
       previousLumaSample: null,
       detections: [],
+    };
+
+    const hypothesisState = {
+      imageBitmap: null,
+      runCount: 0,
+    };
+
+    const setHypothesisStatus = (text) => {
+      if (!elements.aiHypothesisStatus) return;
+      elements.aiHypothesisStatus.textContent = text;
+    };
+
+    const clearHypothesisCanvas = (canvas) => {
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+
+    const drawBitmapCentered = (canvas, bitmap) => {
+      if (!canvas || !bitmap) return;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const ratio = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
+      const targetWidth = Math.max(1, Math.round(bitmap.width * ratio));
+      const targetHeight = Math.max(1, Math.round(bitmap.height * ratio));
+      const offsetX = Math.floor((canvas.width - targetWidth) / 2);
+      const offsetY = Math.floor((canvas.height - targetHeight) / 2);
+      ctx.drawImage(bitmap, offsetX, offsetY, targetWidth, targetHeight);
+    };
+
+    const drawHypothesisWatermark = (canvas) => {
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(-Math.PI / 6);
+      ctx.globalAlpha = 0.32;
+      ctx.fillStyle = "#ffb347";
+      ctx.font = "700 26px Inter, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("ГИПОТЕЗА", 0, 0);
+      ctx.restore();
+    };
+
+    const addPixelNoise = (canvas, amount = 8) => {
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = frame.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const noise = (Math.random() - 0.5) * amount;
+        data[i] = Math.max(0, Math.min(255, data[i] + noise));
+        data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+        data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+      }
+      ctx.putImageData(frame, 0, 0);
+    };
+
+    const renderHypothesisResult = () => {
+      const sourceCanvas = elements.aiHypothesisOriginalCanvas;
+      const resultCanvas = elements.aiHypothesisResultCanvas;
+      if (!sourceCanvas || !resultCanvas) return;
+      if (!hypothesisState.imageBitmap) {
+        setHypothesisStatus("Гипотеза: сначала загрузите исходное фото.");
+        return;
+      }
+
+      hypothesisState.runCount += 1;
+      const ctx = resultCanvas.getContext("2d");
+      ctx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+
+      const jitterX = (Math.random() - 0.5) * 8;
+      const jitterY = (Math.random() - 0.5) * 8;
+      const scale = 1 + Math.random() * 0.05;
+      const hue = (Math.random() - 0.5) * 6;
+
+      ctx.save();
+      ctx.filter = `contrast(${1.08 + Math.random() * 0.2}) brightness(${1.02 + Math.random() * 0.1}) saturate(${1.04 + Math.random() * 0.12}) hue-rotate(${hue}deg)`;
+      ctx.translate(resultCanvas.width / 2 + jitterX, resultCanvas.height / 2 + jitterY);
+      ctx.scale(scale, scale);
+      ctx.translate(-resultCanvas.width / 2, -resultCanvas.height / 2);
+      ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, resultCanvas.width, resultCanvas.height);
+      ctx.restore();
+
+      addPixelNoise(resultCanvas, 10);
+      drawHypothesisWatermark(resultCanvas);
+
+      setHypothesisStatus(`Гипотеза: сгенерирован снимок #${hypothesisState.runCount}. Если не подошло — нажмите снова.`);
+      actions.recordLog("ai-face-hypothesis-generate", "Сгенерирован гипотетический снимок лица", {
+        run: hypothesisState.runCount,
+        mode: "lazy-hypothesis",
+      });
+    };
+
+    const resetHypothesisPanel = () => {
+      hypothesisState.imageBitmap = null;
+      hypothesisState.runCount = 0;
+      if (elements.aiHypothesisInput) {
+        elements.aiHypothesisInput.value = "";
+      }
+      clearHypothesisCanvas(elements.aiHypothesisOriginalCanvas);
+      clearHypothesisCanvas(elements.aiHypothesisResultCanvas);
+      setHypothesisStatus("Гипотеза: загрузите исходное фото.");
+    };
+
+    const loadHypothesisSource = async (event) => {
+      const file = event?.target?.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        setHypothesisStatus("Гипотеза: поддерживаются только изображения.");
+        return;
+      }
+
+      try {
+        const bitmap = await createImageBitmap(file);
+        hypothesisState.imageBitmap = bitmap;
+        hypothesisState.runCount = 0;
+        drawBitmapCentered(elements.aiHypothesisOriginalCanvas, bitmap);
+        drawBitmapCentered(elements.aiHypothesisResultCanvas, bitmap);
+        drawHypothesisWatermark(elements.aiHypothesisResultCanvas);
+        setHypothesisStatus("Гипотеза: исходник загружен. Нажмите «Сгенерировать снимок».");
+        actions.recordLog("ai-face-hypothesis-source", "Загружен исходник для гипотезы лица", {
+          fileName: file.name,
+          width: bitmap.width,
+          height: bitmap.height,
+        });
+      } catch (error) {
+        setHypothesisStatus(`Гипотеза: ошибка загрузки (${error?.message || "unknown"}).`);
+      }
     };
 
     const ensureAnalysisCanvas = () => {
@@ -42,6 +173,398 @@ export const createAiBlueprint = () => ({
       elements.aiStatus.textContent = text;
     };
 
+    const setBackendStatus = (text) => {
+      if (!elements.aiBackendStatus) return;
+      elements.aiBackendStatus.textContent = text;
+    };
+
+    const markBackendStatus = (isOnline, details = "") => {
+      if (isOnline) {
+        setBackendStatus(`Backend: online${details ? ` | ${details}` : ""}`);
+      } else {
+        setBackendStatus(`Backend: offline${details ? ` | ${details}` : ""}`);
+      }
+    };
+
+    const setBackendJobStatus = (text) => {
+      if (!elements.aiBackendJobStatus) return;
+      elements.aiBackendJobStatus.textContent = text;
+    };
+
+    const backendJobsView = {
+      cursor: null,
+      prevCursors: [],
+      nextCursor: null,
+      filter: "all",
+      lastPageSize: 0,
+      activeJobId: null,
+      idempotencyCache: {},
+      payloadByJobId: {},
+      resultByJobId: {},
+      pendingRetryPayload: null,
+    };
+
+    const resolveBackendJobsFilter = () => {
+      const value = elements.aiBackendJobsFilter?.value || backendJobsView.filter || "all";
+      return value === "all" ? null : value;
+    };
+
+    const updateBackendJobDetails = (text) => {
+      if (!elements.aiBackendJobsDetail) return;
+      elements.aiBackendJobsDetail.textContent = text;
+    };
+
+    const setBackendJobsWarning = (text, { ok = false } = {}) => {
+      if (!elements.aiBackendJobsWarning) return;
+      elements.aiBackendJobsWarning.textContent = `Warning: ${text}`;
+      elements.aiBackendJobsWarning.classList.toggle("is-ok", ok);
+    };
+
+    const markBackendJobsUpdatedNow = () => {
+      if (!elements.aiBackendJobsUpdated) return;
+      const now = new Date();
+      elements.aiBackendJobsUpdated.textContent = `Last update: ${now.toLocaleTimeString()}`;
+    };
+
+    const formatBackendJobDetails = (job, extras = []) => {
+      const detail = [
+        `Job details: ${job?.jobId || "-"}`,
+        `status=${job?.status || "unknown"}`,
+        job?.createdAt ? `created=${job.createdAt}` : null,
+        job?.startedAt ? `started=${job.startedAt}` : null,
+        job?.finishedAt ? `finished=${job.finishedAt}` : null,
+        ...extras,
+      ].filter(Boolean).join(" | ");
+      updateBackendJobDetails(detail);
+    };
+
+    const canRetryJob = (status) => ["failed", "timeout", "canceled"].includes(status);
+
+    const renderBackendJobsList = (items = []) => {
+      if (!elements.aiBackendJobsList) return;
+      elements.aiBackendJobsList.innerHTML = "";
+      if (!items.length) {
+        const item = document.createElement("li");
+        item.textContent = "Backend jobs не найдены для выбранного фильтра.";
+        elements.aiBackendJobsList.appendChild(item);
+        return;
+      }
+
+      items.forEach((job) => {
+        const item = document.createElement("li");
+        item.className = "backend-job-item";
+        if (job?.jobId && job.jobId === backendJobsView.activeJobId) {
+          item.classList.add("is-active");
+        }
+
+        const status = job?.status || "unknown";
+        const header = document.createElement("div");
+        header.className = "backend-job-item__header";
+
+        const idNode = document.createElement("span");
+        idNode.className = "backend-job-id";
+        idNode.textContent = job?.jobId || "-";
+
+        const badge = document.createElement("span");
+        badge.className = `backend-job-badge status-${status}`;
+        badge.textContent = status;
+
+        header.appendChild(idNode);
+        header.appendChild(badge);
+
+        const meta = document.createElement("div");
+        meta.className = "backend-job-meta";
+        meta.textContent = job?.error ? `error: ${job.error}` : `task: ${job?.task || "detect-objects"}`;
+
+        const actionsRow = document.createElement("div");
+        actionsRow.className = "backend-job-actions";
+
+        const detailsButton = document.createElement("button");
+        detailsButton.type = "button";
+        detailsButton.className = "backend-job-action";
+        detailsButton.textContent = "Details";
+        detailsButton.addEventListener("click", () => {
+          backendJobsView.activeJobId = job?.jobId || null;
+          formatBackendJobDetails(job, [job?.error ? `error=${job.error}` : null]);
+          refreshBackendJobsPanel({ log: false });
+        });
+        actionsRow.appendChild(detailsButton);
+
+        if (status === "done") {
+          const resultButton = document.createElement("button");
+          resultButton.type = "button";
+          resultButton.className = "backend-job-action";
+          resultButton.textContent = "Open result";
+          resultButton.addEventListener("click", () => {
+            openBackendJobResult(job);
+          });
+          actionsRow.appendChild(resultButton);
+
+          const copyJsonButton = document.createElement("button");
+          copyJsonButton.type = "button";
+          copyJsonButton.className = "backend-job-action";
+          copyJsonButton.textContent = "Copy JSON";
+          copyJsonButton.addEventListener("click", () => {
+            copyBackendJobResultJson(job);
+          });
+          actionsRow.appendChild(copyJsonButton);
+        }
+
+        if (["pending", "running"].includes(status)) {
+          const cancelButton = document.createElement("button");
+          cancelButton.type = "button";
+          cancelButton.className = "backend-job-action danger";
+          cancelButton.textContent = "Cancel";
+          cancelButton.addEventListener("click", () => {
+            cancelBackendJob(job?.jobId);
+          });
+          actionsRow.appendChild(cancelButton);
+        }
+
+        if (canRetryJob(status)) {
+          const retryButton = document.createElement("button");
+          retryButton.type = "button";
+          retryButton.className = "backend-job-action";
+          retryButton.textContent = "Retry";
+          retryButton.addEventListener("click", () => {
+            retryBackendJob(job);
+          });
+          actionsRow.appendChild(retryButton);
+        }
+
+        item.appendChild(header);
+        item.appendChild(meta);
+        item.appendChild(actionsRow);
+        elements.aiBackendJobsList.appendChild(item);
+      });
+    };
+
+    const updateBackendJobsPaginationUi = () => {
+      if (elements.aiBackendJobsPrevButton) {
+        elements.aiBackendJobsPrevButton.disabled = backendJobsView.prevCursors.length === 0;
+      }
+      if (elements.aiBackendJobsNextButton) {
+        elements.aiBackendJobsNextButton.disabled = !backendJobsView.nextCursor;
+      }
+      if (elements.aiBackendJobsPagination) {
+        const pageNumber = backendJobsView.prevCursors.length + 1;
+        const filterLabel = resolveBackendJobsFilter() || "all";
+        elements.aiBackendJobsPagination.textContent = `Jobs page: ${pageNumber} | filter: ${filterLabel} | items: ${backendJobsView.lastPageSize}`;
+      }
+      if (elements.aiBackendJobsDetail && !backendJobsView.activeJobId) {
+        updateBackendJobDetails("Job details: —");
+      }
+    };
+
+    const buildBackendIdempotencyKey = () => {
+      const caseId = state.caseMeta?.id || elements.caseId?.value || "case-unknown";
+      const sourceKey = state.selectedImportedFileKey || state.currentFile?.__playlistKey || state.currentFile?.name || "source-unknown";
+      const timeBucket = Math.floor((elements.video?.currentTime || 0) * 2) / 2;
+      const requestWindow = Math.floor(Date.now() / 2000);
+      return ["detect-objects", caseId, sourceKey, `t${timeBucket.toFixed(1)}`, `w${requestWindow}`].join("|");
+    };
+
+    const cancelBackendJob = async (jobId) => {
+      if (!jobId) return;
+      try {
+        const endpointBase = getBackendApiBase();
+        const response = await withTimeout(
+          fetch(`${endpointBase}/jobs/${jobId}/cancel`, { method: "POST" }),
+          6000,
+          "Превышен таймаут отмены backend job"
+        );
+        if (!response.ok) {
+          const message = await parseBackendError(response, `Backend job cancel ${response.status}`);
+          throw new Error(message);
+        }
+        const payload = await response.json();
+        backendJobsView.activeJobId = jobId;
+        setBackendJobStatus(`Backend job ${jobId}: ${payload?.status || "canceled"}`);
+        formatBackendJobDetails(payload, ["updated=cancel"]);
+        actions.recordLog("ai-backend-job-cancel", "Backend job отменен из jobs monitor", {
+          jobId,
+          status: payload?.status || "canceled",
+        });
+        await refreshBackendJobsPanel({ log: true });
+      } catch (error) {
+        setBackendJobStatus(`Backend job ${jobId}: cancel error (${error?.message || "unknown"})`);
+      }
+    };
+
+    const openBackendJobResult = async (job) => {
+      const jobId = job?.jobId;
+      if (!jobId) return;
+      const endpointBase = getBackendApiBase();
+      try {
+        const response = await withTimeout(
+          fetch(`${endpointBase}/jobs/${jobId}/result`, { method: "GET" }),
+          6000,
+          "Превышен таймаут получения backend job result"
+        );
+        if (!response.ok) {
+          const message = await parseBackendError(response, `Backend job result ${response.status}`);
+          throw new Error(message);
+        }
+
+        const payload = await response.json();
+        backendJobsView.resultByJobId[jobId] = payload;
+        const sourceMeta = backendJobsView.payloadByJobId[jobId]?.sourceMeta || null;
+        const objects = Array.isArray(payload?.objects)
+          ? payload.objects.map((item) => ({
+              x: Number(item.x || 0),
+              y: Number(item.y || 0),
+              width: Number(item.width || 0),
+              height: Number(item.height || 0),
+              label: item.label || "object",
+              score: typeof item.score === "number" ? item.score : null,
+            }))
+          : [];
+        updateOverlaySize();
+        renderBoxes(objects, "#34d399");
+        renderResultList(
+          elements.aiObjectList,
+          objects.map((box, index) => {
+            const size = `${Math.round(box.width)}x${Math.round(box.height)} px`;
+            const confidence = typeof box.score === "number" ? ` (${Math.round(box.score * 100)}%)` : "";
+            return `Объект ${index + 1}: ${box.label || "object"}${confidence}, ${size}`;
+          }),
+          "Объекты не найдены."
+        );
+
+        backendJobsView.activeJobId = jobId;
+        setBackendJobStatus(`Backend job ${jobId}: result loaded`);
+        formatBackendJobDetails(job, [
+          `objects=${objects.length}`,
+          payload?.modelVersion ? `model=${payload.modelVersion}` : null,
+          payload?.requestId ? `requestId=${payload.requestId}` : null,
+          typeof payload?.latencyMs === "number" ? `latency=${payload.latencyMs}ms` : null,
+          sourceMeta?.sourceType ? `sourceType=${sourceMeta.sourceType}` : null,
+          typeof sourceMeta?.videoTimeSec === "number" ? `videoTime=${sourceMeta.videoTimeSec}s` : null,
+          sourceMeta?.sourceKey ? `sourceKey=${sourceMeta.sourceKey}` : null,
+        ]);
+        actions.recordLog("ai-backend-job-open-result", "Открыт результат backend job из jobs monitor", {
+          jobId,
+          objects: objects.length,
+          modelVersion: payload?.modelVersion || null,
+          latencyMs: payload?.latencyMs || null,
+          requestId: payload?.requestId || null,
+          sourceMeta,
+        });
+      } catch (error) {
+        setBackendJobStatus(`Backend job ${jobId}: result error (${error?.message || "unknown"})`);
+      }
+    };
+
+    const copyBackendJobResultJson = async (job) => {
+      const jobId = job?.jobId;
+      if (!jobId) return;
+      const cachedPayload = backendJobsView.resultByJobId[jobId] || null;
+      try {
+        let payload = cachedPayload;
+        if (!payload) {
+          const endpointBase = getBackendApiBase();
+          const response = await withTimeout(
+            fetch(`${endpointBase}/jobs/${jobId}/result`, { method: "GET" }),
+            6000,
+            "Превышен таймаут получения backend job result"
+          );
+          if (!response.ok) {
+            const message = await parseBackendError(response, `Backend job result ${response.status}`);
+            throw new Error(message);
+          }
+          payload = await response.json();
+          backendJobsView.resultByJobId[jobId] = payload;
+        }
+
+        await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+        setBackendJobStatus(`Backend job ${jobId}: result JSON copied`);
+      } catch (error) {
+        setBackendJobStatus(`Backend job ${jobId}: copy JSON error (${error?.message || "unknown"})`);
+      }
+    };
+
+    const retryBackendJob = async (job) => {
+      const jobId = job?.jobId || "unknown";
+      if (detectObjectsInProgress) {
+        setBackendJobStatus(`Backend job ${jobId}: retry skipped (дождитесь завершения текущей детекции)`);
+        return;
+      }
+      const snapshotPayload = backendJobsView.payloadByJobId[job?.jobId || ""] || null;
+      const hasSnapshot = Boolean(snapshotPayload?.imageBase64);
+      backendJobsView.pendingRetryPayload = snapshotPayload;
+      backendJobsView.activeJobId = job?.jobId || null;
+      formatBackendJobDetails(job, ["retry=scheduled", hasSnapshot ? "source=original-snapshot" : "source=current-frame-fallback"]);
+      setBackendJobStatus(`Backend job ${jobId}: retry ${hasSnapshot ? "по исходному snapshot" : "на текущем кадре (fallback)"}...`);
+      actions.recordLog("ai-backend-job-retry", "Повтор backend job из jobs monitor", {
+        sourceJobId: job?.jobId || null,
+        sourceStatus: job?.status || null,
+        retryMode: hasSnapshot ? "original-snapshot" : "current-frame-fallback",
+      });
+      if (state.aiProvider !== "backend") {
+        elements.aiProviderSelect.value = "backend";
+        applyAiProvider("backend", { log: false });
+      }
+      await detectObjectsDemo();
+    };
+
+    const fetchBackendJobsPage = async ({ cursor = backendJobsView.cursor, pushHistory = false, log = false } = {}) => {
+      const endpointBase = getBackendApiBase();
+      const params = new URLSearchParams();
+      const filter = resolveBackendJobsFilter();
+      if (filter) {
+        params.set("status", filter);
+      }
+      params.set("limit", "8");
+      if (cursor) {
+        params.set("cursor", cursor);
+      }
+
+      const url = `${endpointBase}/jobs?${params.toString()}`;
+      const response = await withTimeout(
+        fetch(url, { method: "GET" }),
+        6000,
+        "Превышен таймаут получения backend jobs list"
+      );
+
+      if (!response.ok) {
+        const message = await parseBackendError(response, `Backend jobs list ${response.status}`);
+        throw new Error(message);
+      }
+
+      const payload = await response.json();
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      if (pushHistory && backendJobsView.cursor !== null) {
+        backendJobsView.prevCursors.push(backendJobsView.cursor);
+      }
+      backendJobsView.cursor = cursor || null;
+      backendJobsView.nextCursor = payload?.nextCursor || null;
+      backendJobsView.lastPageSize = items.length;
+      renderBackendJobsList(items);
+      updateBackendJobsPaginationUi();
+      markBackendJobsUpdatedNow();
+      setBackendJobsWarning("none", { ok: true });
+      if (log) {
+        actions.recordLog("ai-backend-jobs-list", "Получена страница backend jobs", {
+          filter: filter || "all",
+          cursor: backendJobsView.cursor,
+          nextCursor: backendJobsView.nextCursor,
+          items: items.length,
+        });
+      }
+      return payload;
+    };
+
+    const refreshBackendJobsPanel = async ({ log = false } = {}) => {
+      if (!elements.aiBackendJobsList) return;
+      try {
+        await fetchBackendJobsPage({ cursor: backendJobsView.cursor, pushHistory: false, log });
+      } catch (error) {
+        setBackendJobStatus(`Backend jobs: ошибка списка (${error?.message || "unknown"})`);
+        updateBackendJobDetails(`Job details: warning | list-refresh-failed | ${error?.message || "unknown"}`);
+        setBackendJobsWarning(`list refresh failed | ${error?.message || "unknown"}`);
+      }
+    };
+
     const applyAiProvider = (provider, { log = true } = {}) => {
       state.aiProvider = provider;
       state.aiRuntimeInfo = {
@@ -49,6 +572,18 @@ export const createAiBlueprint = () => ({
         modelVersion: runtimeAdapters[provider]?.modelVersion || "unknown",
       };
       setStatus(`AI runtime provider: ${provider}`);
+      if (provider === "backend") {
+        pingBackendHealth({ log });
+        refreshBackendJobsPanel({ log: false });
+        if (!backendJobsAutoRefreshId) {
+          backendJobsAutoRefreshId = window.setInterval(() => {
+            refreshBackendJobsPanel({ log: false });
+          }, 5000);
+        }
+      } else if (backendJobsAutoRefreshId) {
+        window.clearInterval(backendJobsAutoRefreshId);
+        backendJobsAutoRefreshId = null;
+      }
       if (log) {
         actions.recordLog("ai-provider-change", "Изменен AI runtime provider", {
           provider,
@@ -98,6 +633,24 @@ export const createAiBlueprint = () => ({
       return state.aiCapabilities;
     };
 
+
+    const withTimeout = async (promise, timeoutMs, timeoutMessage) => {
+      let timerId;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timerId = window.setTimeout(() => {
+              reject(new Error(timeoutMessage));
+            }, timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (typeof timerId === "number") {
+          window.clearTimeout(timerId);
+        }
+      }
+    };
 
     const applyAiSuperResolution = () => {
       const factor = Number.parseFloat(elements.aiSrFactor.value) || 2;
@@ -410,6 +963,103 @@ export const createAiBlueprint = () => ({
       };
     };
 
+    const getBackendApiBase = () => {
+      const fromInput = elements.aiBackendUrlInput?.value?.trim();
+      if (fromInput) {
+        return fromInput.replace(/\/$/, "");
+      }
+      const saved = localStorage.getItem("aiBackendUrl");
+      if (saved && saved.trim()) {
+        return saved.trim().replace(/\/$/, "");
+      }
+      const explicit = window.__AI_BACKEND_URL;
+      if (typeof explicit === "string" && explicit.trim()) {
+        return explicit.trim().replace(/\/$/, "");
+      }
+      return "http://127.0.0.1:8000";
+    };
+
+    const persistBackendApiBase = () => {
+      if (!elements.aiBackendUrlInput) return;
+      const value = elements.aiBackendUrlInput.value.trim();
+      if (!value) {
+        localStorage.removeItem("aiBackendUrl");
+        return;
+      }
+      localStorage.setItem("aiBackendUrl", value.replace(/\/$/, ""));
+    };
+
+    const canvasToJpegDataUrl = (canvas, quality = 0.85) =>
+      new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Не удалось получить blob из кадра"));
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(new Error("Не удалось прочитать blob кадра"));
+            reader.readAsDataURL(blob);
+          },
+          "image/jpeg",
+          quality
+        );
+      });
+
+    const parseBackendError = async (response, fallbackPrefix) => {
+      try {
+        const payload = await response.json();
+        const code = payload?.code || "backend_error";
+        const message = payload?.message || fallbackPrefix;
+        return `${fallbackPrefix} [${code}]: ${message}`;
+      } catch (_error) {
+        const text = await response.text();
+        return `${fallbackPrefix}: ${text.slice(0, 160)}`;
+      }
+    };
+
+    const pingBackendHealth = async ({ log = false } = {}) => {
+      const endpointBase = getBackendApiBase();
+      const endpoint = `${endpointBase}/health`;
+      try {
+        const response = await withTimeout(
+          fetch(endpoint, { method: "GET" }),
+          4000,
+          "Превышен таймаут проверки backend /health"
+        );
+        if (!response.ok) {
+          markBackendStatus(false, `HTTP ${response.status}`);
+          if (log) {
+            actions.recordLog("ai-backend-health", "Backend health-check завершился ошибкой", {
+              endpoint,
+              status: response.status,
+            });
+          }
+          return false;
+        }
+        const payload = await response.json();
+        markBackendStatus(true, payload.service || "ok");
+        if (log) {
+          actions.recordLog("ai-backend-health", "Backend health-check OK", {
+            endpoint,
+            service: payload.service,
+            version: payload.version,
+          });
+        }
+        return true;
+      } catch (error) {
+        markBackendStatus(false, error?.message || "network error");
+        if (log) {
+          actions.recordLog("ai-backend-health", "Backend health-check недоступен", {
+            endpoint,
+            message: error?.message || "unknown",
+          });
+        }
+        return false;
+      }
+    };
+
     const createRuntimeAdapters = () => {
       const mockAdapter = {
         id: "mock",
@@ -417,6 +1067,451 @@ export const createAiBlueprint = () => ({
         detectFaces: async () => runFaceDetectorDemo(),
         detectObjects: async () => ({ objects: detectObjectsFromFrame() }),
         detectScenes: async () => runAutoSceneDelta(),
+      };
+
+      let tfObjectModel = null;
+      let tfObjectModelPromise = null;
+
+      const loadTfObjectModel = async () => {
+        if (tfObjectModel) return tfObjectModel;
+        if (tfObjectModelPromise) return tfObjectModelPromise;
+
+        actions.recordLog("ai-model-load-start", "Начата загрузка модели coco-ssd", {
+          provider: "tfjs",
+          model: "coco-ssd",
+          variant: "lite_mobilenet_v2",
+        });
+        setStatus("TFJS: загрузка модели coco-ssd...");
+
+        tfObjectModelPromise = (async () => {
+          try {
+            await withTimeout(
+              import("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.esm.min.js"),
+              15000,
+              "Превышен таймаут загрузки TensorFlow.js"
+            );
+            const cocoSsd = await withTimeout(
+              import("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.esm.js"),
+              15000,
+              "Превышен таймаут загрузки coco-ssd"
+            );
+            tfObjectModel = await withTimeout(
+              cocoSsd.load({ base: "lite_mobilenet_v2" }),
+              20000,
+              "Превышен таймаут инициализации модели coco-ssd"
+            );
+            actions.recordLog("ai-model-load-ok", "Модель coco-ssd загружена", {
+              provider: "tfjs",
+              model: "coco-ssd",
+              variant: "lite_mobilenet_v2",
+            });
+            setStatus("TFJS: модель coco-ssd готова.");
+            return tfObjectModel;
+          } catch (error) {
+            tfObjectModelPromise = null;
+            actions.recordLog("ai-model-load-fail", "Ошибка загрузки модели coco-ssd", {
+              provider: "tfjs",
+              model: "coco-ssd",
+              message: error?.message || "unknown",
+            });
+            setStatus("TFJS: не удалось загрузить модель, включён fallback на mock.");
+            throw error;
+          }
+        })();
+
+        return tfObjectModelPromise;
+      };
+
+      const tfjsAdapter = {
+        id: "tfjs",
+        modelVersion: "coco-ssd-2.2.3",
+        detectFaces: async () => {
+          const result = await mockAdapter.detectFaces();
+          return {
+            ...result,
+            provider: "tfjs",
+            emulated: true,
+            note: "Для лиц используется demo fallback. Реальная модель подключена для detectObjects.",
+          };
+        },
+        detectObjects: async () => {
+          if (elements.video.readyState < 2) {
+            return {
+              objects: [],
+              modelVersion: "coco-ssd-2.2.3",
+            };
+          }
+
+          const model = await loadTfObjectModel();
+          const detections = await withTimeout(
+            model.detect(elements.video),
+            8000,
+            "Превышен таймаут выполнения detectObjects"
+          );
+          const objects = detections.map((detection) => {
+            const [x, y, width, height] = detection.bbox;
+            return {
+              x,
+              y,
+              width,
+              height,
+              label: detection.class,
+              score: detection.score,
+            };
+          });
+
+          return {
+            objects,
+            modelVersion: "coco-ssd-2.2.3",
+          };
+        },
+        detectScenes: async () => {
+          const result = await mockAdapter.detectScenes();
+          return {
+            ...result,
+            provider: "tfjs",
+            emulated: true,
+            note: "Для авто-сцен используется demo fallback.",
+          };
+        },
+      };
+
+      let onnxObjectDetector = null;
+      let onnxObjectDetectorPromise = null;
+
+      const loadOnnxObjectDetector = async () => {
+        if (onnxObjectDetector) return onnxObjectDetector;
+        if (onnxObjectDetectorPromise) return onnxObjectDetectorPromise;
+
+        actions.recordLog("ai-model-load-start", "Начата загрузка ONNX DETR модели", {
+          provider: "onnx",
+          model: "Xenova/detr-resnet-50",
+        });
+        setStatus("ONNX: загрузка DETR модели...");
+
+        onnxObjectDetectorPromise = (async () => {
+          try {
+            const transformers = await withTimeout(
+              import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"),
+              20000,
+              "Превышен таймаут загрузки transformers.js"
+            );
+            const { pipeline, env } = transformers;
+            env.allowLocalModels = false;
+            env.useBrowserCache = true;
+
+            onnxObjectDetector = await withTimeout(
+              pipeline("object-detection", "Xenova/detr-resnet-50"),
+              35000,
+              "Превышен таймаут инициализации ONNX DETR модели"
+            );
+            actions.recordLog("ai-model-load-ok", "ONNX DETR модель загружена", {
+              provider: "onnx",
+              model: "Xenova/detr-resnet-50",
+            });
+            setStatus("ONNX: DETR модель готова.");
+            return onnxObjectDetector;
+          } catch (error) {
+            onnxObjectDetectorPromise = null;
+            actions.recordLog("ai-model-load-fail", "Ошибка загрузки ONNX DETR модели", {
+              provider: "onnx",
+              model: "Xenova/detr-resnet-50",
+              message: error?.message || "unknown",
+            });
+            setStatus("ONNX: не удалось загрузить модель, включён fallback на mock.");
+            throw error;
+          }
+        })();
+
+        return onnxObjectDetectorPromise;
+      };
+
+      const onnxAdapter = {
+        id: "onnx",
+        modelVersion: "Xenova/detr-resnet-50",
+        detectFaces: async () => {
+          const result = await mockAdapter.detectFaces();
+          return {
+            ...result,
+            provider: "onnx",
+            emulated: true,
+            note: "Для лиц используется demo fallback. Реальная ONNX модель подключена для detectObjects.",
+          };
+        },
+        detectObjects: async () => {
+          if (elements.video.readyState < 2) {
+            return {
+              objects: [],
+              modelVersion: "Xenova/detr-resnet-50",
+            };
+          }
+
+          ensureAnalysisCanvas();
+          state.aiAnalysisContext.drawImage(
+            elements.video,
+            0,
+            0,
+            state.aiAnalysisCanvas.width,
+            state.aiAnalysisCanvas.height
+          );
+
+          const detector = await loadOnnxObjectDetector();
+          const detections = await withTimeout(
+            detector(state.aiAnalysisCanvas, { threshold: 0.35 }),
+            12000,
+            "Превышен таймаут ONNX detectObjects"
+          );
+
+          const objects = detections.map((detection) => {
+            const box = detection.box || {};
+            const x = Number(box.xmin ?? 0);
+            const y = Number(box.ymin ?? 0);
+            const xmax = Number(box.xmax ?? x);
+            const ymax = Number(box.ymax ?? y);
+            return {
+              x,
+              y,
+              width: Math.max(0, xmax - x),
+              height: Math.max(0, ymax - y),
+              label: detection.label || "object",
+              score: typeof detection.score === "number" ? detection.score : null,
+            };
+          });
+
+          return {
+            objects,
+            modelVersion: "Xenova/detr-resnet-50",
+          };
+        },
+        detectScenes: async () => {
+          const result = await mockAdapter.detectScenes();
+          return {
+            ...result,
+            provider: "onnx",
+            emulated: true,
+            note: "Для авто-сцен используется demo fallback.",
+          };
+        },
+      };
+
+      const backendAdapter = {
+        id: "backend",
+        modelVersion: "backend-mvp-1.0.0",
+        detectFaces: async () => {
+          const result = await mockAdapter.detectFaces();
+          return {
+            ...result,
+            provider: "backend",
+            emulated: true,
+            note: "Для лиц backend-MVP пока использует demo fallback.",
+          };
+        },
+        detectObjects: async () => {
+          if (elements.video.readyState < 2) {
+            setBackendJobStatus("Backend job: видео не готово.");
+            return {
+              objects: [],
+              modelVersion: "backend-mvp-1.0.0",
+            };
+          }
+
+          const retryPayload = backendJobsView.pendingRetryPayload;
+          const useSnapshotRetry = Boolean(retryPayload?.imageBase64);
+
+          let imageBase64 = "";
+          let minScore = 0.35;
+          let sourceMeta = null;
+          if (useSnapshotRetry) {
+            imageBase64 = retryPayload.imageBase64;
+            minScore = typeof retryPayload.minScore === "number" ? retryPayload.minScore : 0.35;
+            sourceMeta = retryPayload.sourceMeta || null;
+            setStatus("Backend: retry с исходным snapshot задачи...");
+            setBackendJobStatus("Backend job: retry/create...");
+          } else {
+            ensureAnalysisCanvas();
+            state.aiAnalysisContext.drawImage(
+              elements.video,
+              0,
+              0,
+              state.aiAnalysisCanvas.width,
+              state.aiAnalysisCanvas.height
+            );
+            imageBase64 = await canvasToJpegDataUrl(state.aiAnalysisCanvas, 0.82);
+            setStatus("Backend: постановка задачи в очередь...");
+            setBackendJobStatus("Backend job: создание...");
+          }
+
+          const endpointBase = getBackendApiBase();
+          const jobsEndpoint = `${endpointBase}/jobs`;
+          const idempotencyKey = useSnapshotRetry
+            ? [retryPayload.idempotencyKey || buildBackendIdempotencyKey(), "retry", Date.now()].join("|")
+            : buildBackendIdempotencyKey();
+          const createBody = {
+            task: "detect-objects",
+            imageBase64,
+            minScore,
+            idempotencyKey,
+          };
+          const createResponse = await withTimeout(
+            fetch(jobsEndpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(createBody),
+            }),
+            10000,
+            "Превышен таймаут обращения к backend /jobs"
+          );
+          backendJobsView.pendingRetryPayload = null;
+
+          if (!createResponse.ok) {
+            setBackendJobStatus(`Backend job: ошибка create (${createResponse.status})`);
+            const message = await parseBackendError(createResponse, `Backend job create ${createResponse.status}`);
+            throw new Error(message);
+          }
+
+          const jobCreate = await createResponse.json();
+          const jobId = jobCreate.jobId;
+          if (!jobId) {
+            setBackendJobStatus("Backend job: backend не вернул jobId");
+            throw new Error("Backend не вернул jobId");
+          }
+
+          const previousForKey = backendJobsView.idempotencyCache[idempotencyKey] || null;
+          const reusedByKey = Boolean(previousForKey && previousForKey === jobId);
+          const reusedByStatus = jobCreate.status && jobCreate.status !== "pending";
+          const reusedJob = reusedByKey || reusedByStatus;
+          backendJobsView.idempotencyCache[idempotencyKey] = jobId;
+          backendJobsView.activeJobId = jobId;
+          backendJobsView.payloadByJobId[jobId] = {
+            idempotencyKey,
+            imageBase64,
+            minScore,
+            sourceMeta: sourceMeta || {
+              caseId: state.caseMeta?.id || elements.caseId?.value || null,
+              sourceKey: state.selectedImportedFileKey || state.currentFile?.__playlistKey || state.currentFile?.name || null,
+              videoTimeSec: Number((elements.video?.currentTime || 0).toFixed(3)),
+              capturedAt: new Date().toISOString(),
+              sourceType: useSnapshotRetry ? "retry-snapshot" : "live-frame",
+            },
+          };
+
+          actions.recordLog("ai-backend-job-create", "Создан backend job для детекции объектов", {
+            endpoint: jobsEndpoint,
+            jobId,
+            idempotencyKey,
+            reusedJob,
+            sourceType: useSnapshotRetry ? "retry-snapshot" : "live-frame",
+          });
+          if (reusedJob) {
+            setBackendJobStatus(`Backend job ${jobId}: reused (${jobCreate.status || "pending"})`);
+            updateBackendJobDetails(`Job details: ${jobId} | reused by idempotencyKey | status=${jobCreate.status || "pending"}`);
+          } else {
+            setBackendJobStatus(`Backend job ${jobId}: ${jobCreate.status || "pending"}`);
+            updateBackendJobDetails(`Job details: ${jobId} | created | idempotency=${idempotencyKey}`);
+          }
+          refreshBackendJobsPanel({ log: false });
+
+          const pollDeadline = Date.now() + 30000;
+          let statusPayload = null;
+          let waitMs = 250;
+          while (Date.now() < pollDeadline) {
+            const statusResponse = await withTimeout(
+              fetch(`${endpointBase}/jobs/${jobId}`, { method: "GET" }),
+              5000,
+              "Превышен таймаут проверки backend job status"
+            );
+            if (!statusResponse.ok) {
+              setBackendJobStatus(`Backend job ${jobId}: ошибка status (${statusResponse.status})`);
+              const message = await parseBackendError(statusResponse, `Backend job status ${statusResponse.status}`);
+              throw new Error(message);
+            }
+            statusPayload = await statusResponse.json();
+
+            if (statusPayload.status === "done") {
+              break;
+            }
+            if (statusPayload.status === "failed") {
+              setBackendJobStatus(`Backend job ${jobId}: failed`);
+              throw new Error(statusPayload.error || "Backend job завершился ошибкой");
+            }
+            if (statusPayload.status === "timeout") {
+              setBackendJobStatus(`Backend job ${jobId}: timeout`);
+              throw new Error("Backend job завершился со статусом timeout");
+            }
+            if (statusPayload.status === "canceled") {
+              setBackendJobStatus(`Backend job ${jobId}: canceled`);
+              throw new Error("Backend job был отменен");
+            }
+
+            setStatus(`Backend job ${jobId}: ${statusPayload.status}`);
+            setBackendJobStatus(`Backend job ${jobId}: ${statusPayload.status}`);
+            await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+            waitMs = Math.min(1200, waitMs + 150);
+          }
+
+          if (!statusPayload || statusPayload.status !== "done") {
+            setBackendJobStatus(`Backend job ${jobId}: timeout`);
+            throw new Error("Превышен таймаут ожидания результата backend job");
+          }
+
+          const resultResponse = await withTimeout(
+            fetch(`${endpointBase}/jobs/${jobId}/result`, { method: "GET" }),
+            6000,
+            "Превышен таймаут получения backend job result"
+          );
+
+          if (!resultResponse.ok) {
+            setBackendJobStatus(`Backend job ${jobId}: ошибка result (${resultResponse.status})`);
+            const message = await parseBackendError(resultResponse, `Backend job result ${resultResponse.status}`);
+            throw new Error(message);
+          }
+
+          const payload = await resultResponse.json();
+          if (typeof payload.latencyMs === "number") {
+            markBackendStatus(true, `job ${jobId} | ${payload.latencyMs}ms`);
+            setBackendJobStatus(`Backend job ${jobId}: done | ${payload.latencyMs}ms`);
+          } else {
+            markBackendStatus(true, `job ${jobId} done`);
+            setBackendJobStatus(`Backend job ${jobId}: done`);
+          }
+          const objects = Array.isArray(payload.objects)
+            ? payload.objects.map((item) => ({
+                x: Number(item.x || 0),
+                y: Number(item.y || 0),
+                width: Number(item.width || 0),
+                height: Number(item.height || 0),
+                label: item.label || "object",
+                score: typeof item.score === "number" ? item.score : null,
+              }))
+            : [];
+
+          backendJobsView.resultByJobId[jobId] = payload;
+          refreshBackendJobsPanel({ log: false });
+          backendJobsView.activeJobId = jobId;
+
+          return {
+            objects,
+            modelVersion: payload.modelVersion || "backend-mvp-1.0.0",
+            backend: {
+              endpoint: jobsEndpoint,
+              latencyMs: payload.latencyMs,
+              requestId: payload.requestId || null,
+              jobId,
+              idempotencyKey,
+            },
+          };
+        },
+        detectScenes: async () => {
+          const result = await mockAdapter.detectScenes();
+          return {
+            ...result,
+            provider: "backend",
+            emulated: true,
+            note: "Для авто-сцен backend-MVP пока использует demo fallback.",
+          };
+        },
       };
 
       const createProxyAdapter = (id) => ({
@@ -450,7 +1545,9 @@ export const createAiBlueprint = () => ({
 
       return {
         mock: mockAdapter,
-        onnx: createProxyAdapter("onnx"),
+        tfjs: tfjsAdapter,
+        onnx: onnxAdapter,
+        backend: backendAdapter,
         torch: createProxyAdapter("torch"),
       };
     };
@@ -475,12 +1572,29 @@ export const createAiBlueprint = () => ({
           fallback: true,
         };
       }
-      const result = await method(payload);
-      return {
-        ...result,
-        provider,
-        modelVersion: adapter.modelVersion || "unknown",
-      };
+      try {
+        const result = await method(payload);
+        return {
+          ...result,
+          provider,
+          modelVersion: result?.modelVersion || adapter.modelVersion || "unknown",
+        };
+      } catch (error) {
+        const fallback = runtimeAdapters.mock[task];
+        const fallbackResult =
+          typeof fallback === "function" ? await fallback(payload) : { error: "Ошибка AI adapter и fallback недоступен" };
+        actions.recordLog("ai-adapter-error", "Ошибка в AI adapter, выполнен fallback к mock", {
+          provider,
+          task,
+          message: error?.message || "unknown",
+        });
+        return {
+          ...fallbackResult,
+          provider: "mock",
+          fallback: true,
+          fallbackReason: "adapter-error",
+        };
+      }
     };
 
     const runMockInferencePipeline = async (task, payload = {}) => {
@@ -507,6 +1621,9 @@ export const createAiBlueprint = () => ({
           durationMs,
           task,
           provider: inferenceResult.provider || context.provider,
+          latencyMs: inferenceResult?.backend?.latencyMs || null,
+          requestId: inferenceResult?.backend?.requestId || null,
+          jobId: inferenceResult?.backend?.jobId || null,
         },
       };
 
@@ -648,37 +1765,80 @@ export const createAiBlueprint = () => ({
       }
     };
 
+    const DETECT_OBJECTS_TIMEOUT_MS = 45000;
+
     const detectObjectsDemo = async () => {
-      const { objects = [], provider, emulated, pipeline, error } = await runMockInferencePipeline("detectObjects");
-      if (error) {
-        setStatus(error);
-        return;
-      }
-      if (!objects.length && elements.video.readyState < 2) {
-        setStatus("Видео не готово для анализа.");
+      if (detectObjectsInProgress) {
+        setStatus("AI детекция уже выполняется, дождитесь завершения текущего запроса.");
         return;
       }
 
-      renderBoxes(objects, "#34d399");
-      renderResultList(
-        elements.aiObjectList,
-        objects.map(
-          (box, index) =>
-            `Объект ${index + 1}: ${Math.round(box.width)}x${Math.round(box.height)} px`
-        ),
-        "Объекты не найдены."
-      );
+      detectObjectsInProgress = true;
+      if (elements.aiObjectDetectButton) {
+        elements.aiObjectDetectButton.disabled = true;
+      }
+      try {
+        const { objects = [], provider, emulated, pipeline, error, fallback } = await withTimeout(
+          runMockInferencePipeline("detectObjects"),
+          DETECT_OBJECTS_TIMEOUT_MS,
+          "Превышен общий таймаут AI детекции объектов"
+        );
+        if (error) {
+          setStatus(`AI ошибка: ${error}`);
+          return;
+        }
+        if (fallback) {
+          setStatus("AI adapter недоступен, использован fallback mock.");
+        }
+        if (!objects.length && elements.video.readyState < 2) {
+          setStatus("Видео не готово для анализа.");
+          return;
+        }
 
-      setStatus(`Найдено объектов (demo): ${objects.length}`);
-      actions.recordLog("ai-object-detect", "Демо детекция объектов", {
-        count: objects.length,
-        provider,
-        emulated,
-        pipeline: {
-          durationMs: pipeline?.durationMs,
-        },
-      });
-      maybeCreateObjectMarker(objects.length, "single-detect");
+        renderBoxes(objects, "#34d399");
+        renderResultList(
+          elements.aiObjectList,
+          objects.map((box, index) => {
+            const size = `${Math.round(box.width)}x${Math.round(box.height)} px`;
+            if (box.label) {
+              const confidence = typeof box.score === "number" ? ` (${Math.round(box.score * 100)}%)` : "";
+              return `Объект ${index + 1}: ${box.label}${confidence}, ${size}`;
+            }
+            return `Объект ${index + 1}: ${size}`;
+          }),
+          "Объекты не найдены."
+        );
+
+        setStatus(`Найдено объектов (${emulated ? "demo" : provider}): ${objects.length}`);
+        actions.recordLog("ai-object-detect", emulated ? "Демо детекция объектов" : "AI детекция объектов", {
+          count: objects.length,
+          provider,
+          emulated,
+          backend: {
+            endpoint: window.__AI_BACKEND_URL || getBackendApiBase(),
+            requestId: pipeline?.requestId || null,
+            jobId: pipeline?.jobId || null,
+            latencyMs: pipeline?.latencyMs || null,
+          },
+          pipeline: {
+            durationMs: pipeline?.durationMs,
+          },
+        });
+        maybeCreateObjectMarker(objects.length, "single-detect");
+      } catch (error) {
+        setStatus(`AI детекция прервана: ${error?.message || "unknown"}`);
+        setBackendJobStatus(`Backend job: detect error (${error?.message || "unknown"})`);
+        actions.recordLog("ai-object-detect-error", "Ошибка AI детекции объектов", {
+          message: error?.message || "unknown",
+          provider: state.aiProvider || "mock",
+        });
+      } finally {
+        detectObjectsInProgress = false;
+        backendJobsView.pendingRetryPayload = null;
+        if (elements.aiObjectDetectButton) {
+          elements.aiObjectDetectButton.disabled = false;
+        }
+      }
     };
 
     const boxCenter = (box) => ({
@@ -838,6 +1998,83 @@ export const createAiBlueprint = () => ({
       runCapabilityCheck();
     });
 
+    if (elements.aiBackendCheckButton) {
+      elements.aiBackendCheckButton.addEventListener("click", () => {
+        persistBackendApiBase();
+        pingBackendHealth({ log: true });
+      });
+    }
+
+    if (elements.aiBackendUrlInput) {
+      elements.aiBackendUrlInput.addEventListener("change", () => {
+        persistBackendApiBase();
+        backendJobsView.cursor = null;
+        backendJobsView.prevCursors = [];
+        backendJobsView.nextCursor = null;
+        backendJobsView.activeJobId = null;
+        if (state.aiProvider === "backend") {
+          pingBackendHealth({ log: true });
+          refreshBackendJobsPanel({ log: true });
+        }
+      });
+    }
+
+    if (elements.aiBackendJobsFilter) {
+      elements.aiBackendJobsFilter.addEventListener("change", () => {
+        backendJobsView.filter = elements.aiBackendJobsFilter.value || "all";
+        backendJobsView.cursor = null;
+        backendJobsView.prevCursors = [];
+        backendJobsView.nextCursor = null;
+        backendJobsView.activeJobId = null;
+        refreshBackendJobsPanel({ log: true });
+      });
+    }
+
+    if (elements.aiBackendJobsRefreshButton) {
+      elements.aiBackendJobsRefreshButton.addEventListener("click", () => {
+        refreshBackendJobsPanel({ log: true });
+      });
+    }
+
+    if (elements.aiBackendJobsPrevButton) {
+      elements.aiBackendJobsPrevButton.addEventListener("click", () => {
+        if (!backendJobsView.prevCursors.length) return;
+        const prevCursor = backendJobsView.prevCursors.pop() || null;
+        fetchBackendJobsPage({ cursor: prevCursor, pushHistory: false, log: true }).catch((error) => {
+          setBackendJobStatus(`Backend jobs: ошибка prev (${error?.message || "unknown"})`);
+          setBackendJobsWarning(`prev page failed | ${error?.message || "unknown"}`);
+        });
+      });
+    }
+
+    if (elements.aiBackendJobsNextButton) {
+      elements.aiBackendJobsNextButton.addEventListener("click", () => {
+        if (!backendJobsView.nextCursor) return;
+        fetchBackendJobsPage({ cursor: backendJobsView.nextCursor, pushHistory: true, log: true }).catch((error) => {
+          setBackendJobStatus(`Backend jobs: ошибка next (${error?.message || "unknown"})`);
+          setBackendJobsWarning(`next page failed | ${error?.message || "unknown"}`);
+        });
+      });
+    }
+
+    if (elements.aiHypothesisInput) {
+      elements.aiHypothesisInput.addEventListener("change", (event) => {
+        loadHypothesisSource(event);
+      });
+    }
+
+    if (elements.aiHypothesisGenerateButton) {
+      elements.aiHypothesisGenerateButton.addEventListener("click", () => {
+        renderHypothesisResult();
+      });
+    }
+
+    if (elements.aiHypothesisResetButton) {
+      elements.aiHypothesisResetButton.addEventListener("click", () => {
+        resetHypothesisPanel();
+      });
+    }
+
     elements.aiTrackStartButton.addEventListener("click", () => {
       startObjectTracking();
     });
@@ -899,8 +2136,25 @@ export const createAiBlueprint = () => ({
       renderResultList(elements.aiFaceList, [], "Лица не найдены.");
     });
 
+    if (elements.aiBackendUrlInput) {
+      elements.aiBackendUrlInput.value = getBackendApiBase();
+    }
+    if (elements.aiBackendJobsFilter) {
+      elements.aiBackendJobsFilter.value = "all";
+      backendJobsView.filter = "all";
+    }
+    setBackendStatus("Backend: не проверен.");
+    setBackendJobStatus("Backend job: нет активной задачи.");
+    updateBackendJobDetails("Job details: —");
+    if (elements.aiBackendJobsUpdated) {
+      elements.aiBackendJobsUpdated.textContent = "Last update: —";
+    }
+    setBackendJobsWarning("none", { ok: true });
+    renderBackendJobsList([]);
+    updateBackendJobsPaginationUi();
     elements.aiProviderSelect.value = state.aiProvider || "mock";
     applyAiProvider(elements.aiProviderSelect.value, { log: false });
+    refreshBackendJobsPanel({ log: false });
     runCapabilityCheck({ log: false });
 
     renderResultList(elements.aiFaceList, [], "Лица не найдены.");
@@ -908,6 +2162,7 @@ export const createAiBlueprint = () => ({
     refreshSceneList();
     elements.aiSrFactor.value = "2";
     elements.aiSceneThreshold.value = "28";
+    resetHypothesisPanel();
 
     const observer = new ResizeObserver(() => {
       updateOverlaySize();
@@ -916,5 +2171,12 @@ export const createAiBlueprint = () => ({
       }
     });
     observer.observe(elements.viewerSurface);
+
+    window.addEventListener("beforeunload", () => {
+      if (backendJobsAutoRefreshId) {
+        window.clearInterval(backendJobsAutoRefreshId);
+        backendJobsAutoRefreshId = null;
+      }
+    });
   },
 });
