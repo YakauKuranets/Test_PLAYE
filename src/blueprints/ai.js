@@ -419,6 +419,80 @@ export const createAiBlueprint = () => ({
         detectScenes: async () => runAutoSceneDelta(),
       };
 
+      let tfObjectModel = null;
+      let tfObjectModelPromise = null;
+
+      const loadTfObjectModel = async () => {
+        if (tfObjectModel) return tfObjectModel;
+        if (tfObjectModelPromise) return tfObjectModelPromise;
+
+        tfObjectModelPromise = (async () => {
+          await import("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.esm.min.js");
+          const cocoSsd = await import(
+            "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.esm.js"
+          );
+          tfObjectModel = await cocoSsd.load({ base: "lite_mobilenet_v2" });
+          actions.recordLog("ai-model-load", "Загружена готовая модель coco-ssd", {
+            provider: "tfjs",
+            model: "coco-ssd",
+            variant: "lite_mobilenet_v2",
+          });
+          return tfObjectModel;
+        })();
+
+        return tfObjectModelPromise;
+      };
+
+      const tfjsAdapter = {
+        id: "tfjs",
+        modelVersion: "coco-ssd-2.2.3",
+        detectFaces: async () => {
+          const result = await mockAdapter.detectFaces();
+          return {
+            ...result,
+            provider: "tfjs",
+            emulated: true,
+            note: "Для лиц используется demo fallback. Реальная модель подключена для detectObjects.",
+          };
+        },
+        detectObjects: async () => {
+          if (elements.video.readyState < 2) {
+            return {
+              objects: [],
+              modelVersion: "coco-ssd-2.2.3",
+            };
+          }
+
+          const model = await loadTfObjectModel();
+          const detections = await model.detect(elements.video);
+          const objects = detections.map((detection) => {
+            const [x, y, width, height] = detection.bbox;
+            return {
+              x,
+              y,
+              width,
+              height,
+              label: detection.class,
+              score: detection.score,
+            };
+          });
+
+          return {
+            objects,
+            modelVersion: "coco-ssd-2.2.3",
+          };
+        },
+        detectScenes: async () => {
+          const result = await mockAdapter.detectScenes();
+          return {
+            ...result,
+            provider: "tfjs",
+            emulated: true,
+            note: "Для авто-сцен используется demo fallback.",
+          };
+        },
+      };
+
       const createProxyAdapter = (id) => ({
         id,
         modelVersion: `${id}-proxy-1.0.0`,
@@ -450,6 +524,7 @@ export const createAiBlueprint = () => ({
 
       return {
         mock: mockAdapter,
+        tfjs: tfjsAdapter,
         onnx: createProxyAdapter("onnx"),
         torch: createProxyAdapter("torch"),
       };
@@ -475,12 +550,29 @@ export const createAiBlueprint = () => ({
           fallback: true,
         };
       }
-      const result = await method(payload);
-      return {
-        ...result,
-        provider,
-        modelVersion: adapter.modelVersion || "unknown",
-      };
+      try {
+        const result = await method(payload);
+        return {
+          ...result,
+          provider,
+          modelVersion: result?.modelVersion || adapter.modelVersion || "unknown",
+        };
+      } catch (error) {
+        const fallback = runtimeAdapters.mock[task];
+        const fallbackResult =
+          typeof fallback === "function" ? await fallback(payload) : { error: "Ошибка AI adapter и fallback недоступен" };
+        actions.recordLog("ai-adapter-error", "Ошибка в AI adapter, выполнен fallback к mock", {
+          provider,
+          task,
+          message: error?.message || "unknown",
+        });
+        return {
+          ...fallbackResult,
+          provider: "mock",
+          fallback: true,
+          fallbackReason: "adapter-error",
+        };
+      }
     };
 
     const runMockInferencePipeline = async (task, payload = {}) => {
@@ -662,10 +754,14 @@ export const createAiBlueprint = () => ({
       renderBoxes(objects, "#34d399");
       renderResultList(
         elements.aiObjectList,
-        objects.map(
-          (box, index) =>
-            `Объект ${index + 1}: ${Math.round(box.width)}x${Math.round(box.height)} px`
-        ),
+        objects.map((box, index) => {
+          const size = `${Math.round(box.width)}x${Math.round(box.height)} px`;
+          if (box.label) {
+            const confidence = typeof box.score === "number" ? ` (${Math.round(box.score * 100)}%)` : "";
+            return `Объект ${index + 1}: ${box.label}${confidence}, ${size}`;
+          }
+          return `Объект ${index + 1}: ${size}`;
+        }),
         "Объекты не найдены."
       );
 
