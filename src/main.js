@@ -1535,6 +1535,62 @@ function initAiOfflineControls() {
 // взаимодействие с модальным окном настроек и работают вместе с
 // modelDownloader.js.
 
+let pendingDesktopUpdates = [];
+
+function getDesktopRuntimeApi() {
+  if (typeof window === 'undefined' || !window.desktopRuntime) {
+    return null;
+  }
+
+  const runtime = window.desktopRuntime;
+  if (
+    typeof runtime.checkModelUpdates !== 'function' ||
+    typeof runtime.updateModel !== 'function' ||
+    typeof runtime.onModelDownloadProgress !== 'function'
+  ) {
+    return null;
+  }
+
+  return runtime;
+}
+
+function renderDesktopUpdates(updates = [], statusMessage = '') {
+  const statusEl = document.getElementById('desktop-update-status');
+  const listEl = document.getElementById('desktop-updates-list');
+  const applyBtn = document.getElementById('apply-updates-btn');
+
+  if (!statusEl || !listEl || !applyBtn) {
+    return;
+  }
+
+  pendingDesktopUpdates = Array.isArray(updates) ? updates : [];
+  listEl.innerHTML = '';
+
+  if (statusMessage) {
+    statusEl.textContent = statusMessage;
+  } else if (pendingDesktopUpdates.length === 0) {
+    statusEl.textContent = 'Обновления для desktop-моделей не найдены.';
+  } else {
+    statusEl.textContent = `Найдено обновлений desktop-моделей: ${pendingDesktopUpdates.length}`;
+  }
+
+  for (const update of pendingDesktopUpdates) {
+    const row = document.createElement('div');
+    row.className = 'desktop-update-item';
+    const from = update.currentVersion || 'не установлена';
+    row.innerHTML = `
+      <div>
+        <strong>${update.name}</strong>
+        <div class="version-shift">${from} → ${update.nextVersion}</div>
+      </div>
+      <span>${update.file || ''}</span>
+    `;
+    listEl.appendChild(row);
+  }
+
+  applyBtn.disabled = pendingDesktopUpdates.length === 0;
+}
+
 /**
  * Загрузить и отобразить список моделей в модальном окне.
  * Создаёт элементы DOM для каждой модели: имя, размер, описание,
@@ -1578,6 +1634,13 @@ async function loadModelsUI() {
     modelsListEl.appendChild(modelItem);
   }
   attachDownloadHandlers();
+
+  const desktopApi = getDesktopRuntimeApi();
+  if (!desktopApi) {
+    renderDesktopUpdates([], 'Desktop runtime API недоступен в браузерном режиме.');
+  } else {
+    renderDesktopUpdates([], 'Для проверки desktop-обновлений нажмите «Проверить обновления».');
+  }
 }
 
 /**
@@ -1693,24 +1756,78 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // Обработчик кнопки "Проверить обновления"
   const checkUpdatesBtn = document.getElementById('check-updates-btn');
+  const applyUpdatesBtn = document.getElementById('apply-updates-btn');
+
   if (checkUpdatesBtn) {
     checkUpdatesBtn.addEventListener('click', async (e) => {
       const btn = e.target;
       btn.disabled = true;
       btn.textContent = 'Проверка...';
+
+      const desktopApi = getDesktopRuntimeApi();
       try {
-        const updates = await checkModelUpdates();
-        if (updates.length === 0) {
-          showNotification('✅ Все модели актуальны!', 'success');
+        if (desktopApi) {
+          const result = await desktopApi.checkModelUpdates();
+          const updates = result?.updates || [];
+          const warning = result?.warning || '';
+          renderDesktopUpdates(updates, warning);
+          if (updates.length === 0) {
+            showNotification('✅ Desktop-модели актуальны!', 'success');
+          } else {
+            showNotification(`Доступно desktop-обновлений: ${updates.length}`, 'info');
+          }
         } else {
-          showNotification(`Доступно обновлений: ${updates.length}. Проверьте список моделей.`, 'info');
-          showUpdatesDialog(updates);
+          const updates = await checkModelUpdates();
+          if (updates.length === 0) {
+            showNotification('✅ Все модели актуальны!', 'success');
+          } else {
+            showNotification(`Доступно обновлений: ${updates.length}. Проверьте список моделей.`, 'info');
+            showUpdatesDialog(updates);
+          }
         }
       } catch (err) {
         showNotification(`❌ ${err.message}`, 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Проверить обновления';
+      }
+    });
+  }
+
+  if (applyUpdatesBtn) {
+    applyUpdatesBtn.addEventListener('click', async () => {
+      const desktopApi = getDesktopRuntimeApi();
+      if (!desktopApi) {
+        showNotification('Desktop runtime API недоступен.', 'error');
+        return;
+      }
+      if (!pendingDesktopUpdates.length) {
+        showNotification('Нет обновлений для установки.', 'info');
+        return;
+      }
+
+      applyUpdatesBtn.disabled = true;
+      const unsubscribe = desktopApi.onModelDownloadProgress((payload) => {
+        const statusEl = document.getElementById('desktop-update-status');
+        if (statusEl && payload?.model) {
+          statusEl.textContent = `Загрузка ${payload.model}: ${payload.percent || 0}%`;
+        }
+      });
+
+      try {
+        for (const update of pendingDesktopUpdates) {
+          await desktopApi.updateModel(update);
+        }
+        showNotification('✅ Desktop-модели обновлены.', 'success');
+        renderDesktopUpdates([], 'Обновления установлены. Выполните повторную проверку для подтверждения.');
+        await loadModelsUI();
+      } catch (err) {
+        showNotification(`❌ Ошибка обновления: ${err.message}`, 'error');
+      } finally {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+        applyUpdatesBtn.disabled = pendingDesktopUpdates.length === 0;
       }
     });
   }

@@ -19,7 +19,7 @@ export class SmartRouter {
     this.mode = 'auto';
     
     /** @type {boolean} */
-    this.online = navigator.onLine;
+    this.online = typeof navigator !== 'undefined' ? navigator.onLine : false;
     
     /** @type {string|null} */
     this.backendUrl = null; // Будет установлен позже из конфига
@@ -235,6 +235,10 @@ export class SmartRouter {
    * @private
    */
   _setupNetworkListeners() {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return;
+    }
+
     const updateOnline = () => {
       this.online = navigator.onLine;
       this._updateIndicator();

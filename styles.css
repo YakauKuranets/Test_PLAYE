@@ -1194,6 +1194,30 @@ button:disabled {
   color: #cddc39;
 }
 
+
+.desktop-updates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.desktop-update-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed #3b4455;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #d6d9de;
+  font-size: 13px;
+}
+
+.desktop-update-item .version-shift {
+  color: #95a7c2;
+  font-size: 12px;
+}
 /* Прогресс бар */
 .progress-bar {
   width: 100%;
