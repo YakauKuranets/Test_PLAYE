@@ -97,16 +97,20 @@ const DEFAULT_CONFIG = {
  */
 export function loadConfig() {
   const config = { ...DEFAULT_CONFIG };
-  try {
-    // Попытка загрузить из localStorage
-    const saved = localStorage.getItem('appConfig');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Глубокое слияние конфигов
-      deepMerge(config, parsed);
+  const storage = getLocalStorage();
+
+  if (storage) {
+    try {
+      // Попытка загрузить из localStorage
+      const saved = storage.getItem('appConfig');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Глубокое слияние конфигов
+        deepMerge(config, parsed);
+      }
+    } catch (err) {
+      console.warn('[Config] Failed to load from localStorage:', err);
     }
-  } catch (err) {
-    console.warn('[Config] Failed to load from localStorage:', err);
   }
   // Переопределение из environment (если доступно)
   if (typeof process !== 'undefined' && process.env) {
@@ -122,10 +126,15 @@ export function loadConfig() {
  * @param {Partial<AppConfig>} updates - Изменения для сохранения
  */
 export function saveConfig(updates) {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+
   try {
     const current = loadConfig();
     const updated = { ...current, ...updates };
-    localStorage.setItem('appConfig', JSON.stringify(updated));
+    storage.setItem('appConfig', JSON.stringify(updated));
     console.log('[Config] Saved to localStorage');
   } catch (err) {
     console.error('[Config] Failed to save:', err);
@@ -176,8 +185,22 @@ export function setConfigValue(path, value) {
  * Сбросить конфигурацию к значениям по умолчанию
  */
 export function resetConfig() {
-  localStorage.removeItem('appConfig');
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+
+  storage.removeItem('appConfig');
   console.log('[Config] Reset to defaults');
+}
+
+
+
+function getLocalStorage() {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+  return localStorage;
 }
 
 /**
