@@ -31,7 +31,8 @@ backend/
 │   └── db/                  # Database models
 │       ├── __init__.py
 │       └── models.py
-├── requirements.txt         # Python dependencies
+├── requirements.txt         # Core backend dependencies
+├── requirements-ai.txt      # Optional heavy AI restoration stack
 ├── Dockerfile               # Docker build file
 └── docker-compose.yml       # Compose file for services
 ```
@@ -42,12 +43,63 @@ database, and set up Celery workers for asynchronous processing.
 
 ## Running locally
 
-To run the backend locally (requires Python 3.10):
+To run the backend locally:
+
+1) Create a virtual environment in **Python 3.10–3.12** (recommended).
+2) Install **core** dependencies.
+3) (Optional) install heavy restoration stack only if required.
+4) Start FastAPI with uvicorn.
 
 ```bash
 cd backend
+python -m venv .venv
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
 pip install -r requirements.txt
+# Optional heavy stack (face restoration / SR):
+# pip install -r requirements-ai.txt --no-build-isolation
 uvicorn app.main:app --reload
+```
+
+### Run from PyCharm
+
+1. Open the repository root in PyCharm.
+2. Configure **Project Interpreter** to `backend/.venv` (or create one there).
+3. Create **Run/Debug Configuration**:
+   - Type: `Python`
+   - Module name: `uvicorn`
+   - Parameters: `app.main:app --reload --host 0.0.0.0 --port 8000`
+   - Working directory: `<repo>/backend`
+4. Run configuration and open:
+   - `http://localhost:8000/`
+   - `http://localhost:8000/api/health`
+
+
+### Troubleshooting on Windows (No space left on device)
+
+If installation fails with `OSError: [Errno 28] No space left on device`, it
+usually happens while `pip` creates temporary isolated build environments for
+`basicsr` dependencies.
+
+Recommended flow:
+
+```powershell
+cd backend
+py -3.10 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+# Install optional stack only when needed:
+# pip install -r requirements-ai.txt --no-build-isolation
+```
+
+If disk is already full:
+
+```powershell
+pip cache purge
+$env:TEMP  # check temp folder used by pip
 ```
 
 To run with Docker (requires Docker and NVIDIA container runtime):
@@ -55,6 +107,7 @@ To run with Docker (requires Docker and NVIDIA container runtime):
 ```bash
 cd backend
 docker compose up --build
+```
 
 ## Authentication
 
@@ -126,7 +179,6 @@ hey -n 100 -c 5 -m POST -H "Authorization: Bearer <token>" \
 This will send 100 POST requests with 5 concurrent workers. Adjust the
 target endpoint and file as needed. For more sophisticated load tests,
 consider writing a ``locustfile.py`` script.
-```
 
 ## Notes
 

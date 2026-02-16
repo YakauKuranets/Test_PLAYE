@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "models": {
+    "gfpgan-light": {
+      "version": "1.0.0",
+      "file": "gfpgan-light.onnx",
+      "sha256": "demo-placeholder"
+    },
+    "realesrgan-x2": {
+      "version": "1.0.0",
+      "file": "realesrgan-x2.onnx",
+      "sha256": "demo-placeholder"
+    },
+    "nafnet-light": {
+      "version": "1.0.0",
+      "file": "nafnet-light.onnx",
+      "sha256": "demo-placeholder"
+    }
+  }
+}

@@ -135,3 +135,21 @@
 3. Выберите ролик в списке и используйте элементы управления для тестирования функций.
 
 > Прототип реализован на чистом HTML/CSS/JS и использует возможности браузера.
+
+
+## Hybrid Desktop (Electron + Local Python)
+
+
+### Что уже реализовано в репозитории
+
+- Добавлен desktop scaffold: `electron/main.js` (запуск окна и локального backend) и `electron/preload.js`.
+- Добавлен локальный manifest моделей `models/manifest.json`, модуль обновления `scripts/model-updater.js` и CLI-скрипты `scripts/check-model-updates.js` + `scripts/update-models.js`.
+- Добавлены IPC-обработчики в `electron/main.js` и bridge-методы в `electron/preload.js` для проверки обновлений и скачивания модели с прогрессом.
+- Полный production-цикл всё ещё в процессе: ретраи/rollback и backend smoke-тест старта уже добавлены, но пока не закрыт UI-экран управления моделями (см. `docs/hybrid-desktop-architecture.md`).
+
+Да — этот подход реализуем и подходит под требования оффлайн‑работы с тяжёлыми
+моделями. В проект добавлен архитектурный план с поэтапным roadmap: `docs/hybrid-desktop-architecture.md`.
+
+Ключевая идея: UI в Electron, локальный FastAPI/PyTorch backend, модели на диске
+и Smart Router с fallback между local/backend/cloud.
+
