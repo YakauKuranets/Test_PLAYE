@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test_PLAYE</title>
+    <link rel="stylesheet" href="styles.css" />
+    <!-- PWA manifest and theme color -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#151923" />
+  </head>
+  <body>
+    <div class="app" id="app-root">
+      <aside class="sidebar">
+        <div class="sidebar__header">
+          <h1>Test_PLAYE</h1>
+          <label class="upload">
+            <input type="file" id="file-input" accept="video/*" multiple />
+            <span>Загрузить видео</span>
+          </label>
+          <button id="compact-toggle" type="button" class="compact-toggle">Компактный режим: выкл</button>
+          <!-- Online/offline indicator for hybrid mode -->
+          <span id="mode-indicator" class="mode-indicator offline">🔌 Оффлайн</span>
+
+          <!-- Mode selector for hybrid operation -->
+          <div class="mode-selector-container">
+            <label for="mode-selector">Режим работы:</label>
+            <select id="mode-selector" class="mode-selector">
+              <option value="auto" selected>🔄 Авто (по доступности)</option>
+              <option value="offline">🔌 Только оффлайн</option>
+              <option value="online">🌐 Только онлайн</option>
+            </select>
+          </div>
+
+          <!-- Backend settings (hidden when in offline mode) -->
+          <div id="backend-settings" class="backend-settings hidden">
+            <label for="backend-url">Backend URL:</label>
+            <input
+              type="text"
+              id="backend-url"
+              class="backend-url-input"
+              placeholder="http://localhost:8000/api"
+              value="http://localhost:8000/api"
+            />
+            <button id="test-backend" class="btn-secondary">Проверить подключение</button>
+            <span id="backend-status" class="backend-status"></span>
+          </div>
+
+        <!-- Model loading progress (hidden by default) -->
+        <div id="model-progress-container" class="model-progress-container hidden">
+          <label>Загрузка модели:</label>
+          <div class="progress-bar">
+            <div id="model-progress-bar" class="progress-bar-inner" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Кнопка настроек (⚙️) для открытия модального окна настроек -->
+        <button id="settings-btn" class="btn btn-icon" title="Настройки">⚙️</button>
+
+        <!-- Model availability status -->
+        <div id="model-availability" class="model-availability">
+          <h3>Доступность моделей</h3>
+          <ul id="model-status-list"></ul>
+        </div>
+        </div>
+        <ul id="playlist" class="playlist"></ul>
+      </aside>
+
+      <!-- Notification container (mode changes, etc.) -->
+      <div id="notifications" class="notifications"></div>
+
+      <main class="main">
+        <section class="viewer">
+          <div class="viewer__surface" id="viewer-surface">
+            <video id="video" controls playsinline></video>
+            <canvas id="temporal-preview" class="temporal-preview"></canvas>
+            <canvas id="ai-overlay" class="ai-overlay"></canvas>
+            <div class="motion-indicator" id="motion-indicator">Движение</div>
+          </div>
+          <p class="hint">
+            Колесико мыши — масштаб; двойной клик — сброс масштаба.
+          </p>
+        </section>
+
+        <section class="controls">
+          <details class="control-accordion" open>
+            <summary>Таймлайн</summary>
+            <div class="control-group timeline">
+            <div class="timeline-header">
+              <span id="timeline-current">0:00.000</span>
+              <span id="timeline-duration">0:00.000</span>
+            </div>
+            <div class="timeline-bar">
+              <div id="timeline-markers" class="timeline-markers"></div>
+              <input
+                type="range"
+                id="timeline"
+                min="0"
+                max="0"
+                step="0.01"
+                value="0"
+              />
+            </div>
+            <div class="timeline-controls">
+              <button id="timeline-zoom-out" type="button">-</button>
+              <span id="timeline-zoom-value">1.0x</span>
+              <button id="timeline-zoom-in" type="button">+</button>
+            </div>
+            </div>
+          </details>
+
+          <details class="control-accordion" open>
+            <summary>Воспроизведение</summary>
+            <div class="control-group">
+            <label>
+              Скорость: <span id="speed-value">1x</span>
+              <input
+                type="range"
+                id="speed"
+                min="0.25"
+                max="100"
+                value="1"
+                step="0.25"
+              />
+            </label>
+            <div class="button-row">
+              <button id="frame-back">Кадр назад</button>
+              <button id="frame-forward">Кадр вперед</button>
+              <button id="screenshot">Скриншот</button>
+            </div>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Нарезка</summary>
+            <div class="control-group">
+            <div class="clip-row">
+              <button id="mark-in">Установить IN</button>
+              <button id="mark-out">Установить OUT</button>
+            </div>
+            <div class="clip-range">
+              <span>IN: <strong id="clip-in">—</strong></span>
+              <span>OUT: <strong id="clip-out">—</strong></span>
+            </div>
+            <button id="export-clip">Экспорт нарезки</button>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Качество</summary>
+            <div class="control-group">
+            <label>
+              Улучшение (контраст/яркость)
+              <input
+                type="range"
+                id="enhance"
+                min="0"
+                max="100"
+                value="0"
+              />
+            </label>
+            <label>
+              Экспозиция
+              <input
+                type="range"
+                id="exposure"
+                min="-50"
+                max="50"
+                value="0"
+                step="1"
+              />
+            </label>
+            <label>
+              Температура (цвет)
+              <input
+                type="range"
+                id="temperature"
+                min="-50"
+                max="50"
+                value="0"
+                step="1"
+              />
+            </label>
+            <label>
+              Шумоподавление (мягкость)
+              <input
+                type="range"
+                id="denoise"
+                min="0"
+                max="10"
+                value="0"
+                step="0.5"
+              />
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="temporal-denoise" />
+              Temporal шумоподавление (demo)
+            </label>
+            <label>
+              Окно temporal (кадры)
+              <input
+                type="range"
+                id="temporal-window"
+                min="1"
+                max="6"
+                value="3"
+                step="1"
+              />
+            </label>
+            <label>
+              Профиль шумоподавления
+              <select id="denoise-profile">
+                <option value="light">Лёгкий</option>
+                <option value="medium" selected>Средний</option>
+                <option value="heavy">Сильный</option>
+              </select>
+            </label>
+            <label>
+              Детализация (clarity)
+              <input
+                type="range"
+                id="clarity"
+                min="0"
+                max="100"
+                value="0"
+                step="1"
+              />
+            </label>
+            <label>
+              Резкость (demo)
+              <input
+                type="range"
+                id="sharpness"
+                min="0"
+                max="100"
+                value="0"
+                step="1"
+              />
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="lowlight-boost" />
+              Усиление low-light
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="upscale" />
+              Апскейл (режим)
+            </label>
+            <label>
+              Апскейл фактор
+              <select id="upscale-factor">
+                <option value="2" selected>2x</option>
+                <option value="4">4x</option>
+              </select>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="grayscale" />
+              Ч/Б режим
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="bypass-filters" />
+              Оригинал без фильтров
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="stabilization-toggle" />
+              Стабилизация (кроп, демо)
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="stabilization-auto-toggle" />
+              Авто-стабилизация (алгоритм, демо)
+            </label>
+            <label>
+              Сила стабилизации
+              <input
+                type="range"
+                id="stabilization-strength"
+                min="0"
+                max="10"
+                value="0"
+                step="1"
+              />
+            </label>
+            <label>
+              Сглаживание стабилизации
+              <input
+                type="range"
+                id="stabilization-smoothing"
+                min="0"
+                max="100"
+                value="60"
+                step="5"
+              />
+            </label>
+            <label>
+              Смещение стабилизации X
+              <input
+                type="range"
+                id="stabilization-offset-x"
+                min="-50"
+                max="50"
+                value="0"
+                step="1"
+              />
+            </label>
+            <label>
+              Смещение стабилизации Y
+              <input
+                type="range"
+                id="stabilization-offset-y"
+                min="-50"
+                max="50"
+                value="0"
+                step="1"
+              />
+            </label>
+            <div class="button-row">
+              <button id="stabilization-profile-light" type="button">
+                Стабилизация Light
+              </button>
+              <button id="stabilization-profile-medium" type="button">
+                Стабилизация Medium
+              </button>
+              <button id="stabilization-profile-strong" type="button">
+                Стабилизация Strong
+              </button>
+            </div>
+            <div class="button-row">
+              <button id="preset-lowlight" type="button">Профиль Low-light</button>
+              <button id="preset-night" type="button">Профиль Ночь</button>
+              <button id="preset-detail" type="button">Профиль Детализация</button>
+              <button id="preset-ultra-lowlight" type="button">
+                Профиль Ultra Low-light
+              </button>
+            </div>
+            <button id="reset-filters" type="button">Сброс фильтров</button>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Детектор движения</summary>
+            <div class="control-group">
+            <label class="toggle">
+              <input type="checkbox" id="motion-marker-toggle" />
+              Авто-маркеры движения
+            </label>
+            <label>
+              Чувствительность детектора
+              <input
+                type="range"
+                id="motion-sensitivity"
+                min="200"
+                max="2000"
+                value="800"
+                step="50"
+              />
+              <span class="range-value" id="motion-sensitivity-value">800</span>
+            </label>
+            <label>
+              Интервал маркеров (сек)
+              <input
+                type="range"
+                id="motion-cooldown"
+                min="1"
+                max="10"
+                value="3"
+                step="1"
+              />
+              <span class="range-value" id="motion-cooldown-value">3</span>
+            </label>
+            <div class="button-row">
+              <button id="motion-start">Старт</button>
+              <button id="motion-stop" disabled>Стоп</button>
+            </div>
+            <p class="muted">
+              Базовая детекция по разнице кадров (демо).
+            </p>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>AI анализ (лица и объекты)</summary>
+            <div class="control-group">
+            <button id="ai-face-detect" type="button">
+              Найти лица (демо)
+            </button>
+            <button id="ai-object-detect" type="button">
+              Найти объекты (демо)
+            </button>
+            <label>
+              AI runtime provider
+              <select id="ai-provider-select">
+                <option value="mock" selected>mock (demo)</option>
+                <option value="tfjs">tfjs (coco-ssd)</option>
+                <option value="onnx">onnx runtime</option>
+                <option value="torch">torch runtime</option>
+                <!-- New providers for Stage 2: local (offline) and cloud (online) modes -->
+                <option value="local">off‑line (быстро)</option>
+                <option value="cloud">облако (максимум)</option>
+              </select>
+            </label>
+            <div class="button-row">
+              <button id="ai-capability-check" type="button">Проверка AI/GPU capability</button>
+            </div>
+            <p class="muted" id="ai-capability-status">Capability: не проверено.</p>
+            <div class="button-row">
+              <button id="ai-track-start" type="button">Старт трекинга (демо)</button>
+              <button id="ai-track-stop" type="button" disabled>Стоп трекинга</button>
+            </div>
+            <label>
+              AI Super-resolution фактор
+              <select id="ai-sr-factor">
+                <option value="1.5">1.5x</option>
+                <option value="2" selected>2x</option>
+                <option value="4">4x</option>
+              </select>
+            </label>
+            <div class="button-row">
+              <button id="ai-sr-apply" type="button">AI Super-resolution (demo)</button>
+              <button id="ai-sr-reset" type="button">Сброс AI SR</button>
+            </div>
+            <label>
+              Порог авто‑сцен (demo)
+              <input type="range" id="ai-scene-threshold" min="10" max="80" value="28" step="1" />
+            </label>
+            <div class="button-row">
+              <button id="ai-scenes-detect" type="button">Авто‑сцены (demo)</button>
+              <button id="ai-scenes-clear" type="button">Очистить авто‑сцены</button>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="ai-face-marker-toggle" />
+              Добавлять маркеры лиц
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="ai-object-marker-toggle" />
+              Добавлять маркеры объектов
+            </label>
+            <p class="muted" id="ai-status">Готов к анализу.</p>
+            <p class="muted">Лица:</p>
+            <ul class="ai-face-list" id="ai-face-list"></ul>
+            <p class="muted">Объекты:</p>
+            <ul class="ai-face-list" id="ai-object-list"></ul>
+            <p class="muted">Сцены (AI):</p>
+            <ul class="ai-face-list" id="ai-scene-list"></ul>
+            <!-- Stage 2: Offline AI tasks -->
+            <p class="muted">AI улучшение качества (оффлайн):</p>
+            <div class="button-row">
+              <button id="ai-face-enhance" type="button">Улучшить лица</button>
+              <button id="ai-upscale-2x" type="button">Апскейл 2x</button>
+              <button id="ai-denoise" type="button">Денойз</button>
+            </div>
+            <!-- Canvas to display AI-enhanced result. Initially hidden until first use -->
+            <canvas id="ai-result-canvas" class="ai-result-canvas hidden"></canvas>
+            <p class="muted" id="ai-model-status"></p>
+            </div>
+          </details>
+
+          <!-- Backend task queue for Stage 3.  Displays pending/running/done tasks
+               executed in the (mock) cloud backend.  Users can launch a demo
+               task to see the queue in action. -->
+          <details class="control-accordion">
+            <summary>Очередь задач (облако)</summary>
+            <div class="control-group">
+              <button id="backend-demo-task" type="button">Запустить demo‑задачу</button>
+              <ul id="backend-task-list" class="backend-task-list"></ul>
+            </div>
+          </details>
+
+          <!-- Synchronisation controls for Stage 4.  Allow users to
+               synchronise cases with a remote store and update local model
+               versions to match the server.  The status text informs the
+               user of the last sync operation. -->
+          <details class="control-accordion">
+            <summary>Синхронизация</summary>
+            <div class="control-group">
+              <button id="sync-cases-btn" type="button">Синхронизировать дела</button>
+              <button id="update-models-btn" type="button">Обновить модели</button>
+              <p id="sync-status" class="muted">Синхронизация ещё не проводилась.</p>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Дело и журнал</summary>
+            <div class="control-group">
+            <label>
+              ID дела
+              <input type="text" id="case-id" placeholder="CASE-2025-0001" />
+            </label>
+            <label>
+              Ответственный
+              <input type="text" id="case-owner" placeholder="ФИО / отдел" />
+            </label>
+            <label>
+              Статус дела
+              <select id="case-status">
+                <option value="active">Активное</option>
+                <option value="review">На проверке</option>
+                <option value="closed">Закрыто</option>
+              </select>
+            </label>
+            <label>
+              Теги дела
+              <input
+                type="text"
+                id="case-tags"
+                placeholder="камера-01, вход, ночь"
+              />
+            </label>
+            <label>
+              Описание/сводка
+              <textarea
+                id="case-summary"
+                rows="3"
+                placeholder="Краткая сводка по делу и наблюдениям"
+              ></textarea>
+            </label>
+            <div class="button-row">
+              <button id="log-entry">Добавить запись</button>
+              <button id="export-log">Экспорт журнала</button>
+              <button id="export-report">Экспорт отчёта</button>
+              <button id="preview-report" type="button">
+                Предпросмотр отчёта
+              </button>
+              <button id="export-ffmpeg-job" type="button">
+                FFmpeg Job (3.1.2 draft)
+              </button>
+              <button id="download-ffmpeg-job" type="button">
+                Экспорт FFmpeg Job JSON
+              </button>
+            </div>
+            <label>
+              FFmpeg Job preview
+              <textarea
+                id="ffmpeg-job-preview"
+                rows="7"
+                readonly
+                class="ffmpeg-job-preview"
+                placeholder="Нажмите FFmpeg Job (demo), чтобы собрать текущие параметры обработки в job draft"
+              ></textarea>
+            </label>
+            <div class="button-row">
+              <button id="queue-ffmpeg-job" type="button">В очередь pipeline (3.3.2)</button>
+            </div>
+            <p class="muted" id="pipeline-status">Pipeline: задач нет.</p>
+            <label>
+              Прогресс pipeline
+              <progress id="pipeline-progress" max="100" value="0"></progress>
+            </label>
+            <p class="muted" id="pipeline-progress-label">0%</p>
+            <ul id="pipeline-queue" class="log-list"></ul>
+            <p class="muted" id="pipeline-error-title">Ошибки pipeline:</p>
+            <ul id="pipeline-errors" class="log-list"></ul>
+            <ul id="log-list" class="log-list"></ul>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Библиотека дел</summary>
+            <div class="control-group">
+            <label>
+              Сохранённые дела
+              <select id="case-library"></select>
+            </label>
+            <label>
+              Поиск по делам
+              <input
+                type="text"
+                id="case-search"
+                placeholder="ID, ответственный, тег"
+              />
+            </label>
+            <div class="button-row">
+              <button id="case-save">Сохранить дело</button>
+              <button id="case-load">Загрузить</button>
+              <button id="case-delete">Удалить</button>
+              <button id="case-clear-search" type="button">Сброс поиска</button>
+            </div>
+            <div class="button-row">
+              <button id="case-export-library" type="button">
+                Экспорт библиотеки
+              </button>
+              <button id="case-import-library" type="button">
+                Импорт библиотеки
+              </button>
+              <input
+                id="case-import-input"
+                type="file"
+                accept="application/json"
+                hidden
+              />
+            </div>
+            <p class="muted" id="case-count"></p>
+            <p class="muted">
+              Сохранение выполняется локально в браузере.
+            </p>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Сводка по делу</summary>
+            <div class="control-group">
+            <div class="summary-grid">
+              <div class="summary-card">
+                <span class="summary-label">Файлов</span>
+                <strong id="case-files-count">0</strong>
+              </div>
+              <div class="summary-card">
+                <span class="summary-label">Маркеров</span>
+                <strong id="case-markers-count">0</strong>
+              </div>
+              <div class="summary-card">
+                <span class="summary-label">Записей журнала</span>
+                <strong id="case-logs-count">0</strong>
+              </div>
+            </div>
+            <p class="muted">
+              Сводка обновляется при загрузке дела и изменениях.
+            </p>
+            </div>
+          </details>
+
+          <details class="control-accordion">
+            <summary>Маркеры событий</summary>
+            <div class="control-group">
+            <label>
+              Тип события
+              <select id="marker-type">
+                <option value="manual">Ручной</option>
+                <option value="movement">Движение</option>
+                <option value="face">Лицо</option>
+                <option value="object">Объект</option>
+              </select>
+            </label>
+            <label>
+              Комментарий
+              <input type="text" id="marker-note" placeholder="Опишите событие" />
+            </label>
+            <div class="button-row">
+              <button id="add-marker">Добавить маркер</button>
+              <button id="export-markers">Экспорт маркеров</button>
+            </div>
+            <ul id="marker-list" class="log-list"></ul>
+            </div>
+          </details>
+
+          <!-- Hypothetical scenarios module (stub) -->
+          <details class="control-accordion">
+            <summary>Гипотезы</summary>
+            <div class="control-group">
+            <p class="muted">
+              Модуль генерации гипотез находится в разработке. Здесь вы сможете
+              выбрать тип генерации и указать параметры для создания
+              альтернативных сценариев или восстановления данных. Пока
+              доступны только заглушки.
+            </p>
+            <label>
+              Тип гипотезы
+              <select id="hypothesis-type">
+                <!-- Тип гипотезы определяет, какие преобразования будут применены. -->
+                <option value="restore">Восстановление видео</option>
+                <option value="alternate">Альтернативные кадры</option>
+                <!-- Супер‑резолюция увеличивает размер кадра и повышает резкость. -->
+                <option value="superres">Супер‑резолюция</option>
+                <option value="3d">3D реконструкция</option>
+                <!-- Новые варианты для подавления шума и уменьшения размытия -->
+                <option value="denoise">Денойзинг</option>
+                <option value="deblur">Деблюринг</option>
+                <!-- Детекция объектов строит рамки вокруг людей, машин и др. -->
+                <option value="detect">Детекция объектов</option>
+              </select>
+            </label>
+            <label>
+              Длина гипотезы (сек.)
+              <input
+                type="number"
+                id="hypothesis-length"
+                min="1"
+                max="60"
+                value="5"
+              />
+            </label>
+            <div class="button-row">
+              <!-- Кнопка запуска генерации гипотезы. Пока доступна только демо‑версия. -->
+              <button id="hypothesis-generate" type="button">
+                Создать гипотезу
+              </button>
+            </div>
+            <!-- Индикатор прогресса: отображает процент готовности при создании клипа. -->
+            <progress id="hypothesis-progress" max="100" value="0" style="width: 100%; display: none;"></progress>
+            <!-- Статус работы модуля гипотез. Здесь выводятся сообщения о ходе генерации. -->
+            <p class="muted" id="hypothesis-status"></p>
+            </div>
+          </details>
+
+    <!-- Секция сравнения до/после. Позволяет выбрать два файла из плейлиста
+         и отобразить их синхронно для визуального сравнения. -->
+    <details class="control-accordion">
+      <summary>Сравнение до/после</summary>
+      <div class="control-group">
+        <p class="muted">Выберите исходный файл и гипотезу для синхронного просмотра.</p>
+        <label>
+          Исходный файл
+          <select id="compare-file-a"></select>
+        </label>
+        <label>
+          Гипотеза
+          <select id="compare-file-b"></select>
+        </label>
+        <div class="button-row">
+          <button id="compare-start" type="button">Показать</button>
+        </div>
+        <div id="compare-container" class="compare-container hidden">
+          <div style="display:flex; gap: 8px; width: 100%;">
+            <video id="compare-video-a" controls style="flex:1; max-height: 240px;"></video>
+            <video id="compare-video-b" controls style="flex:1; max-height: 240px;"></video>
+          </div>
+        </div>
+      </div>
+    </details>
+        </section>
+      </main>
+
+    <!-- Модальное окно настроек -->
+    <div id="settings-modal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>⚙️ Настройки</h2>
+          <button class="modal-close" id="settings-close">×</button>
+        </div>
+        <!-- Вкладки -->
+        <div class="modal-tabs">
+          <button class="tab-btn active" data-tab="models">Модели</button>
+          <button class="tab-btn" data-tab="general">Общие</button>
+        </div>
+        <!-- Вкладка Модели -->
+        <div class="tab-content active" id="models-tab">
+          <h3>Доступные модели AI</h3>
+          <p class="hint">Загрузите модели для работы в оффлайн режиме</p>
+          <div id="models-list"></div>
+          <div class="modal-actions">
+            <button id="check-updates-btn" class="btn btn-secondary">Проверить обновления</button>
+          </div>
+        </div>
+        <!-- Вкладка Общие -->
+        <div class="tab-content" id="general-tab" style="display: none;">
+          <h3>Общие настройки</h3>
+          <div class="setting-group">
+            <label>Режим работы:</label>
+            <select id="router-mode">
+              <option value="auto">Автоматически</option>
+              <option value="offline">Только оффлайн</option>
+              <option value="online">Только онлайн</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+    <canvas id="capture" class="hidden"></canvas>
+    <script type="module" src="src/main.js"></script>
+
+    <!--
+      Стартовый экран
+      Этот оверлей отображается при первом запуске приложения.
+      Пользователь выбирает режим работы: видеоплеер или реконструкция фото.
+      Кнопка шестерёнки в правом нижнем углу открывает меню загрузки моделей.
+    -->
+    <div id="start-overlay" class="start-overlay">
+      <div class="start-content">
+        <h1>Добро пожаловать</h1>
+        <p class="muted">Выберите режим работы:</p>
+        <div class="start-buttons">
+          <button id="start-video" type="button">Видеоплеер</button>
+          <button id="start-photo" type="button">Реконструкция фото</button>
+        <!-- Кнопка для перехода к режиму 3D реконструкции -->
+        <button id="start-3d" type="button">3D реконструкция</button>
+        </div>
+      </div>
+      <button id="gear-button" class="gear-button" type="button">
+        <!-- Используем unicode символ шестерёнки, чтобы не зависеть от сторонних иконок -->
+        ⚙
+      </button>
+      <div id="model-menu" class="model-menu hidden">
+        <h2>Модели</h2>
+        <p class="muted">Доступные для загрузки модели. Выберите файл, чтобы добавить новую модель.</p>
+        <ul id="model-list" class="model-list">
+          <li><strong>superres:</strong> Супер‑разрешение (2× увеличение)</li>
+          <li><strong>superres2x:</strong> Супер‑разрешение (2×, улучшенная версия)</li>
+          <!-- Здесь можно добавить новые модели вручную -->
+        </ul>
+        <label class="upload-model">
+          <span>Загрузить модель</span>
+          <input type="file" id="model-upload-input" accept=".onnx,.json" />
+        </label>
+
+        <!-- Переключатель темы. Позволяет менять цветовую схему интерфейса
+             (светлая/тёмная). Сохранённая тема запоминается в localStorage. -->
+        <button id="theme-toggle" type="button" style="margin-top: 0.75rem;">Сменить тему</button>
+      </div>
+    </div>
+
+    <!--
+      Оверлей реконструкции фото
+      Здесь пользователь может загрузить несколько изображений и запустить простейшую реконструкцию. Пока что
+      реализована базовая функция усреднения изображений; в будущем сюда можно подключить 3D‑модели.
+    -->
+    <div id="photo-overlay" class="photo-overlay hidden">
+      <div class="photo-content">
+        <h1>Реконструкция фото</h1>
+        <p class="muted">Выберите как минимум два изображения для реконструкции.</p>
+        <input type="file" id="photo-input" accept="image/*" multiple />
+        <div class="button-row" style="margin-top: 0.5rem; gap: 0.5rem;">
+          <button id="photo-start" type="button">Реконструировать</button>
+          <!-- Экспорт текущего результата реконструкции (если есть) -->
+          <button id="photo-export" type="button">Экспорт</button>
+          <!-- Импорт ранее сохранённого результата из JSON -->
+          <button id="photo-import-btn" type="button">Импорт</button>
+          <input type="file" id="photo-import-input" accept="application/json" hidden />
+          <button id="photo-back" type="button">Назад</button>
+        </div>
+        <canvas id="photo-canvas" class="photo-canvas" width="0" height="0"></canvas>
+        <p class="muted" id="photo-status"></p>
+      </div>
+    </div>
+
+    <!--
+      Оверлей 3D реконструкции
+      Этот оверлей позволяет загружать карту глубины, экспортировать
+      point cloud и просматривать простую 3D модель.  Он скрыт по
+      умолчанию и открывается из стартового меню.
+    -->
+    <div id="recon3d-overlay" class="recon3d-overlay hidden">
+      <div class="photo-content">
+        <h1>3D реконструкция</h1>
+        <p class="muted">Выберите изображение карты глубины (монохромное или RGB)</p>
+        <input type="file" id="recon3d-input" accept="image/*" />
+        <div class="button-row" style="margin-top: 0.5rem; gap: 0.5rem;">
+          <button id="recon3d-export" type="button">Экспорт point cloud</button>
+          <button id="recon3d-3d-preview" type="button">3D Preview</button>
+          <button id="recon3d-back" type="button">Назад</button>
+        </div>
+        <canvas id="recon3d-canvas" class="photo-canvas" width="0" height="0"></canvas>
+        <div id="recon3d-view3d" class="recon3d-view3d"></div>
+        <p class="muted" id="recon3d-status"></p>
+      </div>
+    </div>
+  </body>
+</html>

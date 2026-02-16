@@ -1,0 +1,1263 @@
+:root {
+  color-scheme: dark;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #0f1115;
+  color: #f5f6f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 280px;
+  background: #151923;
+  border-right: 1px solid #232a36;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+
+
+.sidebar__header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compact-toggle {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.app.compact .sidebar {
+  width: 240px;
+  padding: 16px 12px;
+  gap: 10px;
+}
+
+.app.compact .main {
+  padding: 16px;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+
+.app.compact .viewer__surface {
+  height: 440px;
+}
+
+.app.compact .control-group {
+  padding: 12px;
+  gap: 8px;
+}
+
+.app.compact .control-group h2 {
+  font-size: 14px;
+}
+
+.app.compact .button-row,
+.app.compact .clip-row {
+  grid-template-columns: repeat(auto-fit, minmax(102px, 1fr));
+  gap: 6px;
+}
+
+.app.compact .log-list {
+  max-height: 120px;
+}
+
+.sidebar__header h1 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+
+.upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a3242;
+  border: 1px solid #3a4357;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.upload input {
+  display: none;
+}
+
+/* Mode indicator styles */
+.mode-indicator {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #2a3242;
+  color: #f5f6f7;
+  display: inline-block;
+  align-self: flex-start;
+}
+.mode-indicator.online {
+  background: #2a8239;
+}
+.mode-indicator.offline {
+  background: #82342a;
+}
+
+.playlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.playlist li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #1d2330;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.playlist li.active,
+.playlist li:hover {
+  background: #2f394c;
+}
+
+.main {
+  flex: 1;
+  padding: 24px;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.viewer__surface {
+  position: relative;
+  background: #0b0d12;
+  border-radius: 16px;
+  border: 1px solid #232a36;
+  overflow: hidden;
+  height: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer__surface video {
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center;
+  transition: transform 0.05s linear;
+}
+
+.ai-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.temporal-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.motion-indicator {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #d64545;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.motion-indicator.active {
+  opacity: 1;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.control-group {
+  background: #151923;
+  border: 1px solid #232a36;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-group h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.ai-face-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #cbd5f1;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #cbd5f5;
+}
+
+.timeline-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 36px;
+}
+
+.timeline-bar input[type="range"] {
+  position: relative;
+  z-index: 2;
+}
+
+.timeline-markers {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 10px;
+  transform: translateY(-50%);
+  z-index: 3;
+}
+
+.timeline-marker {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid #0f131b;
+  background: #f59e0b;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.timeline-marker:hover {
+  background: #fbbf24;
+}
+
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 12px;
+  color: #cbd5f5;
+}
+
+label {
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+input[type="text"] {
+  background: #0f131b;
+  border: 1px solid #2f394c;
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+textarea {
+  background: #0f131b;
+  border: 1px solid #2f394c;
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.ffmpeg-job-preview {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+select {
+  background: #0f131b;
+  border: 1px solid #2f394c;
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+progress {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.button-row,
+.clip-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+button {
+  background: #2a3242;
+  color: inherit;
+  border: 1px solid #3a4357;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.range-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+.hint,
+.muted {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.clip-range {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  background: #131a26;
+  border: 1px solid #2f394c;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 12px;
+  background: #0f131b;
+  border: 1px solid #232a36;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.log-list li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #1d2330;
+}
+
+/* Accordion controls for compact UI */
+/*
+  The control-accordion component wraps a heading (<summary>) and a control-group.
+  We override the default <details>/<summary> styles to provide a cohesive look
+  and hide the native disclosure triangle. When collapsed, only the summary
+  header is visible. When open, the header receives a bottom border to
+  separate it from the content. The content inherits padding from the group
+  container but drops its own border and background so that the accordion
+  appears as a single card.
+*/
+
+.control-accordion {
+  background: #151923;
+  border: 1px solid #232a36;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.control-accordion summary {
+  padding: 16px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  user-select: none;
+}
+
+.control-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Arrow indicator appended to each summary */
+.control-accordion summary::after {
+  content: '▼';
+  font-size: 12px;
+  margin-left: 8px;
+  transition: transform 0.2s ease;
+}
+
+/* Rotate arrow when accordion is expanded */
+.control-accordion[open] summary::after {
+  transform: rotate(180deg);
+}
+
+/* When open, draw a line between the header and content */
+.control-accordion[open] summary {
+  border-bottom: 1px solid #232a36;
+}
+
+/* Remove default border/background from control groups inside accordion */
+.control-accordion .control-group {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 16px;
+  gap: 12px;
+}
+
+.hidden {
+  display: none;
+}
+
+/*
+ * Стартовый экран и меню моделей
+ * Этот блок отображается поверх всей страницы при запуске и
+ * предоставляет пользователю выбор между видеоплеером и реконструкцией фото.
+ */
+.start-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 17, 21, 0.95);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  text-align: center;
+  padding: 1rem;
+  color: #f5f6f7;
+}
+
+.start-content h1 {
+  margin-bottom: 0.25rem;
+  font-size: 2rem;
+}
+
+.start-content p {
+  margin-top: 0;
+  font-size: 0.9rem;
+  color: #8a8f9f;
+}
+
+.start-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.start-buttons button {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  background: #0a84ff;
+  color: #f5f6f7;
+  transition: background 0.2s ease;
+}
+
+.start-buttons button:hover {
+  background: #0066cc;
+}
+
+/* Шестерёнка в правом нижнем углу стартового экрана */
+.gear-button {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  cursor: pointer;
+  color: #8a8f9f;
+  padding: 0.5rem;
+  border-radius: 50%;
+  line-height: 1;
+  transition: background 0.2s ease;
+}
+
+.gear-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Меню моделей, которое отображается при нажатии на шестерёнку */
+.model-menu {
+  position: absolute;
+  bottom: 4rem;
+  right: 1rem;
+  background: #151923;
+  border: 1px solid #232a36;
+  border-radius: 4px;
+  padding: 0.75rem;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  width: 260px;
+  max-width: 90%;
+  z-index: 1001;
+  color: #f5f6f7;
+}
+
+.model-menu.hidden {
+  display: none;
+}
+
+.model-menu h2 {
+  margin-top: 0;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.model-menu p {
+  margin-top: 0;
+  font-size: 0.8rem;
+  color: #8a8f9f;
+}
+
+.model-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.model-menu li {
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.upload-model {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.upload-model span {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.upload-model input[type="file"] {
+  font-size: 0.75rem;
+  color: #f5f6f7;
+}
+
+/* Оверлей для модуля реконструкции фото */
+.photo-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  background: rgba(15, 17, 21, 0.95);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  color: #f5f6f7;
+}
+
+.photo-content {
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+}
+
+.photo-content h1 {
+  margin-bottom: 0.5rem;
+  font-size: 1.8rem;
+}
+
+.photo-canvas {
+  display: block;
+  margin: 1rem auto;
+  max-width: 100%;
+  max-height: 60vh;
+  background: #0f1115;
+  border: 1px solid #232a36;
+}
+
+/*
+ * 3D reconstruction overlay.  Reuses the same positioning as the photo
+ * overlay but uses its own class so that it can be shown/hidden
+ * independently.  The .photo-content class is reused for the inner
+ * container.  See index.html for structure.
+ */
+.recon3d-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  background: rgba(15, 17, 21, 0.95);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  color: #f5f6f7;
+}
+
+/*
+ * Container for the WebGL point cloud renderer.  It takes up the
+ * available width and a proportion of the height, similar to the
+ * photo canvas.  The WebGL renderer will insert its own canvas into
+ * this element.
+ */
+.recon3d-view3d {
+  display: block;
+  margin: 1rem auto;
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
+  background: #0f1115;
+  border: 1px solid #232a36;
+  overflow: hidden;
+}
+
+/* Полноэкранный режим для сравнения до/после */
+.compare-container.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2000;
+  background: #0f1115;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.compare-container.fullscreen video {
+  max-height: 45%;
+  width: 50%;
+}
+
+@media (max-width: 1024px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Backend task queue (Stage 3)
+ *
+ * Styles for the list of backend tasks, including progress and cancel links.
+ */
+.backend-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #2a2e3a;
+  border-radius: 4px;
+  background-color: #1e2230;
+  font-size: 0.9rem;
+}
+
+.backend-task-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid #2a2e3a;
+  color: #d0d4e0;
+}
+
+.backend-task-list li:last-child {
+  border-bottom: none;
+}
+
+.backend-task-status {
+  font-weight: bold;
+  margin-right: 8px;
+  min-width: 70px;
+  text-transform: uppercase;
+}
+
+.backend-task-progress {
+  flex-grow: 1;
+  height: 6px;
+  background-color: #3a3f58;
+  border-radius: 3px;
+  margin: 0 8px;
+  overflow: hidden;
+}
+
+.backend-task-progress > div {
+  height: 100%;
+  background-color: #4f9aff;
+  width: 0%;
+  transition: width 0.2s linear;
+}
+
+.backend-task-cancel {
+  cursor: pointer;
+  color: #ff4c4c;
+  font-size: 0.9rem;
+  text-decoration: underline;
+}
+
+.backend-task-cancel:hover {
+  color: #ff7f7f;
+}
+
+/* Mode Selector */
+.mode-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.mode-selector-container label {
+  font-size: 12px;
+  color: #a0aec0;
+  font-weight: 500;
+}
+
+.mode-selector {
+  padding: 6px 12px;
+  background: #1a202c;
+  color: #fff;
+  border: 1px solid #2d3748;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-selector:hover {
+  border-color: #4299e1;
+}
+
+.mode-selector:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+/* Backend Settings */
+.backend-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.backend-settings.hidden {
+  display: none;
+}
+
+.backend-settings label {
+  font-size: 12px;
+  color: #a0aec0;
+  font-weight: 500;
+}
+
+.backend-url-input {
+  flex: 1;
+  padding: 6px 12px;
+  background: #1a202c;
+  color: #fff;
+  border: 1px solid #2d3748;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+}
+
+.backend-url-input:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.backend-status {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+
+.backend-status.success {
+  color: #48bb78;
+  background: rgba(72, 187, 120, 0.1);
+}
+
+.backend-status.error {
+  color: #f56565;
+  background: rgba(245, 101, 101, 0.1);
+}
+
+.backend-status.testing {
+  color: #4299e1;
+  background: rgba(66, 153, 225, 0.1);
+}
+
+/* Stage 2: AI enhancement result canvas */
+.ai-result-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #2d3748;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.btn-secondary {
+  padding: 6px 12px;
+  background: #2d3748;
+  color: #fff;
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #4a5568;
+  border-color: #718096;
+}
+
+.btn-secondary:active {
+  transform: translateY(1px);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Progress bar for model loading */
+.model-progress-container {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.progress-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: #2d3748;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  background: #4299e1;
+  width: 0%;
+  transition: width 0.2s ease;
+}
+
+/* Notification styles (Stage 1.9) */
+.notifications {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
+.notification {
+  background: rgba(45, 55, 72, 0.9);
+  color: #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+.notification.fade-out {
+  opacity: 0;
+}
+
+/* Model availability list */
+.model-availability {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+.model-availability h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.9rem;
+  color: #e2e8f0;
+}
+.model-availability ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.model-availability li {
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+  color: #e2e8f0;
+}
+.model-availability .status-indicator {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+}
+.model-availability .available {
+  background-color: #48bb78;
+}
+.model-availability .unavailable {
+  background-color: #f56565;
+}
+
+/* ==================================================================== */
+/* Дополнительные стили для модального окна настроек и списка моделей. */
+
+/* Кнопка‑иконка для шестерёнки */
+.btn-icon {
+  min-width: 40px;
+  padding: 8px 12px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Модальное окно */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: #1a1d24;
+  border: 1px solid #2a2d34;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 0;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #2a2d34;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #fff;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: #888;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  line-height: 28px;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: #fff;
+}
+
+/* Вкладки */
+.modal-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 16px 24px 0;
+  border-bottom: 1px solid #2a2d34;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #888;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: #fff;
+}
+
+.tab-btn.active {
+  color: #fff;
+  border-bottom-color: #4CAF50;
+}
+
+.tab-content {
+  padding: 24px;
+}
+
+.hint {
+  color: #888;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* Список моделей */
+#models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.model-item {
+  background: #22252c;
+  border: 1px solid #2a2d34;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.model-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.model-name {
+  font-weight: 600;
+  color: #fff;
+  font-size: 15px;
+}
+
+.model-size {
+  color: #888;
+  font-size: 13px;
+}
+
+.model-description {
+  color: #bbb;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.model-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #777;
+  margin-top: 4px;
+}
+
+.model-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.status-badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.status-badge.not-loaded {
+  background: #3a3a3a;
+  color: #888;
+}
+
+.status-badge.loaded {
+  background: #2d5016;
+  color: #4CAF50;
+}
+
+.status-badge.loading {
+  background: #3d4a1f;
+  color: #cddc39;
+}
+
+/* Прогресс бар */
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background: #1a1d24;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  margin-top: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #66BB6A);
+  transition: width 0.3s ease;
+  border-radius: 12px;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Кнопки для загрузки моделей */
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  background: #4CAF50;
+  color: #fff;
+  transition: background 0.2s;
+}
+
+.btn-sm:hover {
+  background: #45a049;
+}
+
+.btn-sm:disabled {
+  background: #3a3a3a;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #2a2d34;
+  color: #fff;
+}
+
+.btn-secondary:hover {
+  background: #3a3d44;
+}
+
+.modal-actions {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #2a2d34;
+  display: flex;
+  justify-content: flex-end;
+}
